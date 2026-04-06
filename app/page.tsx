@@ -1,65 +1,360 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect, useMemo } from "react";
+import { type TeamScored } from "@/lib/data";
+
+type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore" | "era" | "moves";
+type SortDir = "asc" | "desc";
+
+function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
+  return (
+    <span className={`inline-block ml-1 ${active ? "text-text-primary" : "text-text-muted/40"}`}>
+      {active ? (dir === "desc" ? "\u25BC" : "\u25B2") : "\u25BC"}
+    </span>
+  );
+}
+
+function StreakBadge({ streak }: { streak: string }) {
+  const isWin = streak.startsWith("W");
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ${
+        isWin
+          ? "bg-green/10 text-green"
+          : "bg-brand-red/10 text-brand-red"
+      }`}
+    >
+      {streak}
+    </span>
+  );
+}
+
+function StatBreakdownTable({
+  breakdown,
+  label,
+  total,
+}: {
+  breakdown: Record<string, { raw: number; mult: number; pts: number }>;
+  label: string;
+  total: number;
+}) {
+  return (
+    <div>
+      <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
+        {label}{" "}
+        <span className="text-text-primary font-bold">
+          {total.toLocaleString()}
+        </span>
+      </h4>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-text-muted">
+              <th className="text-left pr-3 pb-1">Stat</th>
+              <th className="text-right pr-3 pb-1">Raw</th>
+              <th className="text-right pr-3 pb-1">Mult</th>
+              <th className="text-right pb-1">Pts</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(breakdown).map(([stat, { raw, mult, pts }]) => (
+              <tr key={stat} className="border-t border-border/50">
+                <td className="pr-3 py-0.5 font-medium text-text-secondary">
+                  {stat}
+                </td>
+                <td className="text-right pr-3 py-0.5 text-text-primary tabular-nums">
+                  {raw}
+                </td>
+                <td className="text-right pr-3 py-0.5 text-text-muted tabular-nums">
+                  {mult > 0 ? `+${mult}x` : `${mult}x`}
+                </td>
+                <td
+                  className={`text-right py-0.5 font-semibold tabular-nums ${
+                    pts > 0
+                      ? "text-green"
+                      : pts < 0
+                        ? "text-brand-red"
+                        : "text-text-muted"
+                  }`}
+                >
+                  {pts > 0 ? "+" : ""}
+                  {pts.toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function TeamRow({ team }: { team: TeamScored }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <>
+      <tr
+        onClick={() => setExpanded(!expanded)}
+        className="cursor-pointer hover:bg-surface-2/50 transition-colors border-t border-border/50"
+      >
+        <td className="py-3 pl-4 pr-2 tabular-nums text-text-muted font-semibold text-center w-10">
+          {team.rank}
+        </td>
+        <td className="py-3 pr-3">
+          <div className="flex flex-col">
+            <span className="font-semibold text-text-primary text-sm">
+              {team.team}
+            </span>
+            <span className="text-text-muted text-xs">{team.manager}</span>
+          </div>
+        </td>
+        <td className="py-3 pr-3 text-center text-sm tabular-nums text-text-secondary hidden sm:table-cell">
+          {team.record}
+        </td>
+        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary hidden md:table-cell">
+          {team.hittingScore.toLocaleString()}
+        </td>
+        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary hidden md:table-cell">
+          {team.pitchingScore.toLocaleString()}
+        </td>
+        <td className="py-3 pr-3 text-right text-sm tabular-nums font-bold text-text-primary">
+          {team.totalScore.toLocaleString()}
+        </td>
+        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary hidden md:table-cell">
+          {team.era.toFixed(2)}
+        </td>
+        <td className="py-3 pr-4 text-center hidden sm:table-cell">
+          <StreakBadge streak={team.streak} />
+        </td>
+        <td className="py-3 pr-4 text-center text-xs text-text-muted hidden lg:table-cell tabular-nums">
+          {team.moves}
+        </td>
+      </tr>
+      {expanded && (
+        <tr>
+          <td colSpan={9} className="bg-surface-2/30 px-4 py-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-3xl">
+              <StatBreakdownTable
+                breakdown={team.hittingBreakdown}
+                label="Hitting"
+                total={team.hittingScore}
+              />
+              <StatBreakdownTable
+                breakdown={team.pitchingBreakdown}
+                label="Pitching"
+                total={team.pitchingScore}
+              />
+            </div>
+            <div className="sm:hidden mt-3 flex gap-4 text-xs text-text-muted">
+              <span>Record: {team.record}</span>
+              <StreakBadge streak={team.streak} />
+              <span>Moves: {team.moves}</span>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="animate-pulse space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="rounded-[14px] border border-border bg-surface h-32" />
+        ))}
+      </div>
+      <div className="rounded-[14px] bg-surface border border-border p-4 space-y-4">
+        {Array.from({ length: 12 }).map((_, i) => (
+          <div key={i} className="h-10 bg-surface-2/50 rounded-lg" />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+  const [rankings, setRankings] = useState<TeamScored[] | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("rank");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "team" ? "asc" : "desc");
+    }
+  };
+
+  const sorted = useMemo(() => {
+    if (!rankings) return null;
+    const list = [...rankings];
+    list.sort((a, b) => {
+      let cmp: number;
+      if (sortKey === "team") {
+        cmp = a.team.localeCompare(b.team);
+      } else {
+        cmp = (a[sortKey] as number) - (b[sortKey] as number);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return list;
+  }, [rankings, sortKey, sortDir]);
+
+  useEffect(() => {
+    fetch("/api/rankings")
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch");
+        return res.json();
+      })
+      .then((data) => {
+        setRankings(data.rankings);
+        setUpdatedAt(data.updatedAt);
+      })
+      .catch((err) => setError(err.message));
+  }, []);
+
+  if (error) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-brand-red text-lg font-semibold">Failed to load rankings</p>
+          <p className="text-text-muted text-sm mt-1">{error}</p>
         </div>
       </main>
-    </div>
+    );
+  }
+
+  return (
+    <main className="min-h-screen py-8 px-4 sm:px-6">
+      <div className="max-w-5xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">
+            TXL Power Rankings
+          </h1>
+          <p className="text-text-secondary mt-1">2026 Season</p>
+        </div>
+
+        {!rankings ? (
+          <LoadingSkeleton />
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+              {rankings.slice(0, 3).map((team, i) => (
+                <div
+                  key={team.team}
+                  className={`rounded-[14px] border p-4 ${
+                    i === 0
+                      ? "bg-amber/5 border-amber/30"
+                      : i === 1
+                        ? "bg-text-secondary/5 border-text-secondary/20"
+                        : "bg-amber/3 border-amber/15"
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <span
+                      className={`text-2xl font-bold ${
+                        i === 0
+                          ? "text-amber"
+                          : i === 1
+                            ? "text-text-secondary"
+                            : "text-amber/60"
+                      }`}
+                    >
+                      #{i + 1}
+                    </span>
+                    <StreakBadge streak={team.streak} />
+                  </div>
+                  <h3 className="font-bold text-text-primary">{team.team}</h3>
+                  <p className="text-text-muted text-xs mb-3">{team.manager}</p>
+                  <div className="flex justify-between items-end">
+                    <div className="flex gap-4 text-xs text-text-secondary">
+                      <span>H: {team.hittingScore.toLocaleString()}</span>
+                      <span>P: {team.pitchingScore.toLocaleString()}</span>
+                    </div>
+                    <span className="text-lg font-bold text-text-primary tabular-nums">
+                      {team.totalScore.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-[14px] bg-surface border border-border overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-xs text-text-muted uppercase tracking-wider border-b border-border">
+                    <th
+                      className="py-3 pl-4 pr-2 text-center w-10 cursor-pointer select-none hover:text-text-secondary"
+                      onClick={() => toggleSort("rank")}
+                    >
+                      #<SortIcon active={sortKey === "rank"} dir={sortDir} />
+                    </th>
+                    <th
+                      className="py-3 pr-3 text-left cursor-pointer select-none hover:text-text-secondary"
+                      onClick={() => toggleSort("team")}
+                    >
+                      Team<SortIcon active={sortKey === "team"} dir={sortDir} />
+                    </th>
+                    <th className="py-3 pr-3 text-center hidden sm:table-cell">Record</th>
+                    <th
+                      className="py-3 pr-3 text-right hidden md:table-cell cursor-pointer select-none hover:text-text-secondary"
+                      onClick={() => toggleSort("hittingScore")}
+                    >
+                      Hitting<SortIcon active={sortKey === "hittingScore"} dir={sortDir} />
+                    </th>
+                    <th
+                      className="py-3 pr-3 text-right hidden md:table-cell cursor-pointer select-none hover:text-text-secondary"
+                      onClick={() => toggleSort("pitchingScore")}
+                    >
+                      Pitching<SortIcon active={sortKey === "pitchingScore"} dir={sortDir} />
+                    </th>
+                    <th
+                      className="py-3 pr-3 text-right cursor-pointer select-none hover:text-text-secondary"
+                      onClick={() => toggleSort("totalScore")}
+                    >
+                      Total<SortIcon active={sortKey === "totalScore"} dir={sortDir} />
+                    </th>
+                    <th
+                      className="py-3 pr-3 text-right hidden md:table-cell cursor-pointer select-none hover:text-text-secondary"
+                      onClick={() => toggleSort("era")}
+                    >
+                      ERA<SortIcon active={sortKey === "era"} dir={sortDir} />
+                    </th>
+                    <th className="py-3 pr-4 text-center hidden sm:table-cell">Streak</th>
+                    <th
+                      className="py-3 pr-4 text-center hidden lg:table-cell cursor-pointer select-none hover:text-text-secondary"
+                      onClick={() => toggleSort("moves")}
+                    >
+                      Moves<SortIcon active={sortKey === "moves"} dir={sortDir} />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted!.map((team) => (
+                    <TeamRow key={team.team} team={team} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="text-text-muted text-xs mt-6 text-center">
+              Live data from ESPN Fantasy Baseball &middot; Click any team for stat breakdown
+              {updatedAt && (
+                <>
+                  <br />
+                  Last updated {new Date(updatedAt).toLocaleString()}
+                </>
+              )}
+            </p>
+          </>
+        )}
+      </div>
+    </main>
   );
 }
