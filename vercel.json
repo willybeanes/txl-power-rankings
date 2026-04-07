@@ -1,4 +1,10 @@
 {
   "installCommand": "bun install",
-  "buildCommand": "bun run build"
+  "buildCommand": "bun run build",
+  "crons": [
+    {
+      "path": "/api/cron/snapshot",
+      "schedule": "55 4 * * *"
+    }
+  ]
 }
