@@ -109,25 +109,25 @@ function TeamRow({ team }: { team: TeamScored }) {
             <span className="text-text-muted text-xs">{team.manager}</span>
           </div>
         </td>
-        <td className="py-3 pr-3 text-center text-sm tabular-nums text-text-secondary hidden sm:table-cell">
+        <td className="py-3 pr-3 text-center text-sm tabular-nums text-text-secondary">
           {team.record}
         </td>
-        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary hidden md:table-cell">
+        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary">
           {team.hittingScore.toLocaleString()}
         </td>
-        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary hidden md:table-cell">
+        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary">
           {team.pitchingScore.toLocaleString()}
         </td>
         <td className="py-3 pr-3 text-right text-sm tabular-nums font-bold text-text-primary">
           {team.totalScore.toLocaleString()}
         </td>
-        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary hidden md:table-cell">
+        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary">
           {team.era.toFixed(2)}
         </td>
-        <td className="py-3 pr-4 text-center hidden sm:table-cell">
+        <td className="py-3 pr-4 text-center">
           <StreakBadge streak={team.streak} />
         </td>
-        <td className="py-3 pr-4 text-center text-xs text-text-muted hidden lg:table-cell tabular-nums">
+        <td className="py-3 pr-4 text-center text-xs text-text-muted tabular-nums">
           {team.moves}
         </td>
       </tr>
@@ -145,11 +145,6 @@ function TeamRow({ team }: { team: TeamScored }) {
                 label="Pitching"
                 total={team.pitchingScore}
               />
-            </div>
-            <div className="sm:hidden mt-3 flex gap-4 text-xs text-text-muted">
-              <span>Record: {team.record}</span>
-              <StreakBadge streak={team.streak} />
-              <span>Moves: {team.moves}</span>
             </div>
           </td>
         </tr>
@@ -285,8 +280,8 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="rounded-[14px] bg-surface border border-border overflow-hidden">
-              <table className="w-full">
+            <div className="rounded-[14px] bg-surface border border-border overflow-x-auto">
+              <table className="w-full min-w-[700px]">
                 <thead>
                   <tr className="text-xs text-text-muted uppercase tracking-wider border-b border-border">
                     <th
@@ -301,15 +296,15 @@ export default function Home() {
                     >
                       Team<SortIcon active={sortKey === "team"} dir={sortDir} />
                     </th>
-                    <th className="py-3 pr-3 text-center hidden sm:table-cell">Record</th>
+                    <th className="py-3 pr-3 text-center">Record</th>
                     <th
-                      className="py-3 pr-3 text-right hidden md:table-cell cursor-pointer select-none hover:text-text-secondary"
+                      className="py-3 pr-3 text-right cursor-pointer select-none hover:text-text-secondary"
                       onClick={() => toggleSort("hittingScore")}
                     >
                       Hitting<SortIcon active={sortKey === "hittingScore"} dir={sortDir} />
                     </th>
                     <th
-                      className="py-3 pr-3 text-right hidden md:table-cell cursor-pointer select-none hover:text-text-secondary"
+                      className="py-3 pr-3 text-right cursor-pointer select-none hover:text-text-secondary"
                       onClick={() => toggleSort("pitchingScore")}
                     >
                       Pitching<SortIcon active={sortKey === "pitchingScore"} dir={sortDir} />
@@ -321,14 +316,14 @@ export default function Home() {
                       Total<SortIcon active={sortKey === "totalScore"} dir={sortDir} />
                     </th>
                     <th
-                      className="py-3 pr-3 text-right hidden md:table-cell cursor-pointer select-none hover:text-text-secondary"
+                      className="py-3 pr-3 text-right cursor-pointer select-none hover:text-text-secondary"
                       onClick={() => toggleSort("era")}
                     >
                       ERA<SortIcon active={sortKey === "era"} dir={sortDir} />
                     </th>
-                    <th className="py-3 pr-4 text-center hidden sm:table-cell">Streak</th>
+                    <th className="py-3 pr-4 text-center">Streak</th>
                     <th
-                      className="py-3 pr-4 text-center hidden lg:table-cell cursor-pointer select-none hover:text-text-secondary"
+                      className="py-3 pr-4 text-center cursor-pointer select-none hover:text-text-secondary"
                       onClick={() => toggleSort("moves")}
                     >
                       Moves<SortIcon active={sortKey === "moves"} dir={sortDir} />
