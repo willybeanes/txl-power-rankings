@@ -89,7 +89,24 @@ function StatBreakdownTable({
   );
 }
 
-function TeamRow({ team }: { team: TeamScored }) {
+/** Returns a background color from red (0) → white (0.5) → blue (1) */
+function heatColor(value: number, min: number, max: number): string {
+  if (max === min) return "transparent";
+  const t = (value - min) / (max - min); // 0 = worst, 1 = best
+  if (t >= 0.5) {
+    // upper half: white → red
+    const strength = (t - 0.5) * 2; // 0 → 1
+    const alpha = strength * 0.35;
+    return `rgba(239, 68, 68, ${alpha})`;
+  } else {
+    // lower half: blue → white
+    const strength = (0.5 - t) * 2; // 0 → 1
+    const alpha = strength * 0.35;
+    return `rgba(59, 130, 246, ${alpha})`;
+  }
+}
+
+function TeamRow({ team, hittingRange, pitchingRange }: { team: TeamScored; hittingRange: [number, number]; pitchingRange: [number, number] }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -112,10 +129,10 @@ function TeamRow({ team }: { team: TeamScored }) {
         <td className="py-3 pr-3 text-center text-sm tabular-nums text-text-secondary">
           {team.record}
         </td>
-        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary">
+        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary" style={{ backgroundColor: heatColor(team.hittingScore, hittingRange[0], hittingRange[1]) }}>
           {team.hittingScore.toLocaleString()}
         </td>
-        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary">
+        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary" style={{ backgroundColor: heatColor(team.pitchingScore, pitchingRange[0], pitchingRange[1]) }}>
           {team.pitchingScore.toLocaleString()}
         </td>
         <td className="py-3 pr-3 text-right text-sm tabular-nums font-bold text-text-primary">
@@ -200,6 +217,18 @@ export default function Home() {
     });
     return list;
   }, [rankings, sortKey, sortDir]);
+
+  const hittingRange = useMemo<[number, number]>(() => {
+    if (!rankings) return [0, 0];
+    const scores = rankings.map((t) => t.hittingScore);
+    return [Math.min(...scores), Math.max(...scores)];
+  }, [rankings]);
+
+  const pitchingRange = useMemo<[number, number]>(() => {
+    if (!rankings) return [0, 0];
+    const scores = rankings.map((t) => t.pitchingScore);
+    return [Math.min(...scores), Math.max(...scores)];
+  }, [rankings]);
 
   useEffect(() => {
     fetch("/api/rankings")
@@ -332,7 +361,7 @@ export default function Home() {
                 </thead>
                 <tbody>
                   {sorted!.map((team) => (
-                    <TeamRow key={team.team} team={team} />
+                    <TeamRow key={team.team} team={team} hittingRange={hittingRange} pitchingRange={pitchingRange} />
                   ))}
                 </tbody>
               </table>
