@@ -126,7 +126,7 @@ export async function fetchESPNData(): Promise<TeamRawStats[]> {
     const streak = streakPrefix ? `${streakPrefix}${overall.streakLength}` : "-";
 
     const moves = t.transactionCounter
-      ? t.transactionCounter.acquisitions + t.transactionCounter.drops + t.transactionCounter.trades
+      ? t.transactionCounter.acquisitions + t.transactionCounter.trades
       : 0;
 
     const manager = memberNames[t.primaryOwner] || t.abbrev;
