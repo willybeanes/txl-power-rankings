@@ -172,3 +172,90 @@ export async function fetchESPNData(): Promise<TeamRawStats[]> {
     return raw;
   });
 }
+
+export interface TeamDailyDetails {
+  teamId: number;
+  teamName: string;
+  dailyPoints: number;
+  trackedAB: number;
+  trackedPA: number;
+}
+
+/** Active batter lineup slot IDs (C, 1B, 2B, 3B, SS, OF, UTIL) */
+const ACTIVE_BATTER_SLOTS = new Set([0, 1, 2, 3, 4, 5, 12]);
+
+export async function fetchDailyDetails(): Promise<TeamDailyDetails[]> {
+  const leagueId = process.env.ESPN_LEAGUE_ID;
+  const espnS2 = process.env.ESPN_S2;
+  const swid = process.env.ESPN_SWID;
+
+  if (!leagueId || !espnS2 || !swid) {
+    throw new Error("Missing ESPN environment variables");
+  }
+
+  // First get the current scoring period
+  const metaUrl = `${ESPN_API_BASE}/${leagueId}?view=mTeam`;
+  const metaRes = await fetch(metaUrl, {
+    headers: { Cookie: `espn_s2=${espnS2}; SWID=${swid}` },
+  });
+  if (!metaRes.ok) throw new Error(`ESPN meta error: ${metaRes.status}`);
+  const metaData = await metaRes.json();
+
+  const scoringPeriodId: number = metaData.scoringPeriodId;
+  const currentMatchupPeriod: number = metaData.status?.currentMatchupPeriod;
+
+  // Fetch matchup data with rosters for today's scoring period
+  const url = `${ESPN_API_BASE}/${leagueId}?view=mMatchup&view=mMatchupScore&scoringPeriodId=${scoringPeriodId}`;
+  const res = await fetch(url, {
+    headers: { Cookie: `espn_s2=${espnS2}; SWID=${swid}` },
+  });
+  if (!res.ok) throw new Error(`ESPN matchup error: ${res.status}`);
+  const data = await res.json();
+
+  // Also build a teamId -> teamName lookup from metaData.teams
+  const teamNames: Record<number, string> = {};
+  for (const t of metaData.teams || []) {
+    teamNames[t.id] = t.name;
+  }
+
+  const results: TeamDailyDetails[] = [];
+  const schedule = data.schedule || [];
+
+  for (const matchup of schedule) {
+    if (matchup.matchupPeriodId !== currentMatchupPeriod) continue;
+
+    for (const side of ["home", "away"] as const) {
+      const team = matchup[side];
+      if (!team) continue;
+
+      const dailyPoints = team.pointsByScoringPeriod?.[scoringPeriodId] ?? 0;
+
+      // Sum tracked AB/PA from active batter slots
+      let trackedAB = 0;
+      let trackedPA = 0;
+      const roster = team.rosterForCurrentScoringPeriod?.entries || [];
+      for (const entry of roster) {
+        if (!ACTIVE_BATTER_SLOTS.has(entry.lineupSlotId)) continue;
+        const stats = entry.playerPoolEntry?.player?.stats || [];
+        const dayStats = stats.find(
+          (s: { statSplitTypeId: number; scoringPeriodId: number }) =>
+            s.statSplitTypeId === 5 && s.scoringPeriodId === scoringPeriodId
+        );
+        if (dayStats?.stats) {
+          trackedAB += dayStats.stats["0"] || 0;
+          trackedPA += dayStats.stats["16"] || 0;
+        }
+      }
+
+      results.push({
+        teamId: team.teamId,
+        teamName: teamNames[team.teamId] || `Team ${team.teamId}`,
+        dailyPoints,
+        trackedAB,
+        trackedPA,
+      });
+    }
+  }
+
+  return results;
+}
