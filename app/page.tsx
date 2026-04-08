@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { type TeamScored } from "@/lib/data";
 
-type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore" | "era" | "moves" | "hr";
+type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore" | "era" | "moves" | "ops";
 type SortDir = "asc" | "desc";
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -107,7 +107,7 @@ function heatColor(value: number, min: number, max: number, reverse = false): st
   }
 }
 
-function TeamRow({ team, hittingRange, pitchingRange, eraRange, hrRange }: { team: TeamScored; hittingRange: [number, number]; pitchingRange: [number, number]; eraRange: [number, number]; hrRange: [number, number] }) {
+function TeamRow({ team, hittingRange, pitchingRange, eraRange, opsRange }: { team: TeamScored; hittingRange: [number, number]; pitchingRange: [number, number]; eraRange: [number, number]; opsRange: [number, number] }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -142,8 +142,8 @@ function TeamRow({ team, hittingRange, pitchingRange, eraRange, hrRange }: { tea
         <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary" style={{ backgroundColor: heatColor(team.era, eraRange[0], eraRange[1], true) }}>
           {team.era.toFixed(2)}
         </td>
-        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary" style={{ backgroundColor: heatColor(team.raw.HR, hrRange[0], hrRange[1]) }}>
-          {team.raw.HR}
+        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary" style={{ backgroundColor: heatColor(team.ops, opsRange[0], opsRange[1]) }}>
+          {team.ops.toFixed(3)}
         </td>
         <td className="py-3 pr-4 text-center">
           <StreakBadge streak={team.streak} />
@@ -214,8 +214,6 @@ export default function Home() {
       let cmp: number;
       if (sortKey === "team") {
         cmp = a.team.localeCompare(b.team);
-      } else if (sortKey === "hr") {
-        cmp = a.raw.HR - b.raw.HR;
       } else {
         cmp = (a[sortKey] as number) - (b[sortKey] as number);
       }
@@ -242,9 +240,9 @@ export default function Home() {
     return [Math.min(...scores), Math.max(...scores)];
   }, [rankings]);
 
-  const hrRange = useMemo<[number, number]>(() => {
+  const opsRange = useMemo<[number, number]>(() => {
     if (!rankings) return [0, 0];
-    const scores = rankings.map((t) => t.raw.HR);
+    const scores = rankings.map((t) => t.ops);
     return [Math.min(...scores), Math.max(...scores)];
   }, [rankings]);
 
@@ -370,9 +368,9 @@ export default function Home() {
                     </th>
                     <th
                       className="py-3 pr-3 text-right cursor-pointer select-none hover:text-text-secondary"
-                      onClick={() => toggleSort("hr")}
+                      onClick={() => toggleSort("ops")}
                     >
-                      HR<SortIcon active={sortKey === "hr"} dir={sortDir} />
+                      OPS<SortIcon active={sortKey === "ops"} dir={sortDir} />
                     </th>
                     <th className="py-3 pr-4 text-center">Streak</th>
                     <th
@@ -385,7 +383,7 @@ export default function Home() {
                 </thead>
                 <tbody>
                   {sorted!.map((team) => (
-                    <TeamRow key={team.team} team={team} hittingRange={hittingRange} pitchingRange={pitchingRange} eraRange={eraRange} hrRange={hrRange} />
+                    <TeamRow key={team.team} team={team} hittingRange={hittingRange} pitchingRange={pitchingRange} eraRange={eraRange} opsRange={opsRange} />
                   ))}
                 </tbody>
               </table>

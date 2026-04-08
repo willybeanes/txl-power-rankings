@@ -50,6 +50,7 @@ export interface TeamScored {
   hittingBreakdown: Record<string, { raw: number; mult: number; pts: number }>;
   pitchingBreakdown: Record<string, { raw: number; mult: number; pts: number }>;
   era: number;
+  ops: number;
 }
 
 export function calcHitting(t: TeamRawStats) {
@@ -95,10 +96,19 @@ export function calcPitching(t: TeamRawStats) {
   return { breakdown, total };
 }
 
-export function scoreTeams(teams: TeamRawStats[]): TeamScored[] {
+export function scoreTeams(
+  teams: TeamRawStats[],
+  trackedAbPa?: Record<string, { ab: number; pa: number }>
+): TeamScored[] {
   const scored = teams.map((t) => {
     const hitting = calcHitting(t);
     const pitching = calcPitching(t);
+    const h = t["1B"] + t["2B"] + t["3B"] + t.HR;
+    const abPa = trackedAbPa?.[t.team];
+    const ab = abPa?.ab ?? 0;
+    const pa = abPa?.pa ?? 0;
+    const obp = pa > 0 ? (h + t.BB + t.HBP) / pa : 0;
+    const slg = ab > 0 ? t.TB / ab : 0;
     return {
       rank: 0,
       team: t.team,
@@ -113,6 +123,7 @@ export function scoreTeams(teams: TeamRawStats[]): TeamScored[] {
       hittingBreakdown: hitting.breakdown,
       pitchingBreakdown: pitching.breakdown,
       era: t.Outs > 0 ? (t.ER / (t.Outs / 3)) * 9 : 0,
+      ops: obp + slg,
     };
   });
   scored.sort((a, b) => b.totalScore - a.totalScore);
