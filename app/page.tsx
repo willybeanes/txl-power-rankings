@@ -29,62 +29,82 @@ function StreakBadge({ streak }: { streak: string }) {
   );
 }
 
-function StatBreakdownTable({
-  breakdown,
-  label,
-  total,
-}: {
-  breakdown: Record<string, { raw: number; mult: number; pts: number }>;
-  label: string;
-  total: number;
-}) {
+interface SnapshotDay {
+  snapshot_date: string;
+  teams: { team: string; dailyPoints?: number }[];
+}
+
+function CumulativeChart({ teamName, snapshots }: { teamName: string; snapshots: SnapshotDay[] }) {
+  const data = useMemo(() => {
+    let cum = 0;
+    return snapshots.map((snap) => {
+      const team = snap.teams.find((t) => t.team === teamName);
+      cum += team?.dailyPoints ?? 0;
+      return { date: snap.snapshot_date, cumulative: cum, daily: team?.dailyPoints ?? 0 };
+    });
+  }, [teamName, snapshots]);
+
+  if (data.length === 0) return <p className="text-text-muted text-sm">No snapshot data available</p>;
+
+  const maxY = Math.max(...data.map((d) => d.cumulative), 1);
+  const W = 600;
+  const H = 200;
+  const padL = 50;
+  const padR = 16;
+  const padT = 20;
+  const padB = 32;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  const x = (i: number) => padL + (i / (data.length - 1)) * plotW;
+  const y = (val: number) => padT + plotH - (val / maxY) * plotH;
+
+  const linePath = data.map((d, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(d.cumulative).toFixed(1)}`).join(" ");
+
+  // Y-axis ticks
+  const yTicks = 4;
+  const yTickVals = Array.from({ length: yTicks + 1 }, (_, i) => Math.round((maxY / yTicks) * i));
+
   return (
-    <div>
-      <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
-        {label}{" "}
-        <span className="text-text-primary font-bold">
-          {total.toLocaleString()}
-        </span>
-      </h4>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-text-muted">
-              <th className="text-left pr-3 pb-1">Stat</th>
-              <th className="text-right pr-3 pb-1">Raw</th>
-              <th className="text-right pr-3 pb-1">Mult</th>
-              <th className="text-right pb-1">Pts</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(breakdown).map(([stat, { raw, mult, pts }]) => (
-              <tr key={stat} className="border-t border-border/50">
-                <td className="pr-3 py-0.5 font-medium text-text-secondary">
-                  {stat}
-                </td>
-                <td className="text-right pr-3 py-0.5 text-text-primary tabular-nums">
-                  {raw}
-                </td>
-                <td className="text-right pr-3 py-0.5 text-text-muted tabular-nums">
-                  {mult > 0 ? `+${mult}x` : `${mult}x`}
-                </td>
-                <td
-                  className={`text-right py-0.5 font-semibold tabular-nums ${
-                    pts > 0
-                      ? "text-green"
-                      : pts < 0
-                        ? "text-brand-red"
-                        : "text-text-muted"
-                  }`}
-                >
-                  {pts > 0 ? "+" : ""}
-                  {pts.toLocaleString()}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div className="overflow-x-auto">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[600px]" style={{ minWidth: 400 }}>
+        {/* Grid lines */}
+        {yTickVals.map((v) => (
+          <g key={v}>
+            <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="#d8dce3" strokeWidth={0.5} />
+            <text x={padL - 6} y={y(v) + 3} textAnchor="end" fontSize={9} fill="#8892a4">{v}</text>
+          </g>
+        ))}
+
+        {/* Line */}
+        <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth={2} strokeLinejoin="round" />
+
+        {/* Area fill */}
+        <path
+          d={`${linePath} L${x(data.length - 1).toFixed(1)},${y(0).toFixed(1)} L${x(0).toFixed(1)},${y(0).toFixed(1)} Z`}
+          fill="rgba(59, 130, 246, 0.08)"
+        />
+
+        {/* Dots */}
+        {data.map((d, i) => (
+          <circle key={i} cx={x(i)} cy={y(d.cumulative)} r={3} fill="#3b82f6" />
+        ))}
+
+        {/* Value on last point */}
+        <text x={x(data.length - 1)} y={y(data[data.length - 1].cumulative) - 8} textAnchor="middle" fontSize={10} fontWeight={600} fill="#1a1d24">
+          {data[data.length - 1].cumulative.toLocaleString()}
+        </text>
+
+        {/* X-axis labels */}
+        {data.map((d, i) => {
+          // Show every 3rd label to avoid crowding, plus first and last
+          if (i !== 0 && i !== data.length - 1 && i % 3 !== 0) return null;
+          const label = d.date.slice(5); // MM-DD
+          return (
+            <text key={i} x={x(i)} y={H - 6} textAnchor="middle" fontSize={8} fill="#8892a4">{label}</text>
+          );
+        })}
+      </svg>
     </div>
   );
 }
@@ -107,7 +127,7 @@ function heatColor(value: number, min: number, max: number, reverse = false): st
   }
 }
 
-function TeamRow({ team, hittingRange, pitchingRange, eraRange, opsRange }: { team: TeamScored; hittingRange: [number, number]; pitchingRange: [number, number]; eraRange: [number, number]; opsRange: [number, number] }) {
+function TeamRow({ team, hittingRange, pitchingRange, eraRange, opsRange, snapshots }: { team: TeamScored; hittingRange: [number, number]; pitchingRange: [number, number]; eraRange: [number, number]; opsRange: [number, number]; snapshots: SnapshotDay[] | null }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -155,18 +175,14 @@ function TeamRow({ team, hittingRange, pitchingRange, eraRange, opsRange }: { te
       {expanded && (
         <tr>
           <td colSpan={10} className="bg-surface-2/30 px-4 py-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-3xl">
-              <StatBreakdownTable
-                breakdown={team.hittingBreakdown}
-                label="Hitting"
-                total={team.hittingScore}
-              />
-              <StatBreakdownTable
-                breakdown={team.pitchingBreakdown}
-                label="Pitching"
-                total={team.pitchingScore}
-              />
-            </div>
+            <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
+              Cumulative Points
+            </h4>
+            {snapshots ? (
+              <CumulativeChart teamName={team.team} snapshots={snapshots} />
+            ) : (
+              <p className="text-text-muted text-sm">Loading chart data...</p>
+            )}
           </td>
         </tr>
       )}
@@ -195,6 +211,7 @@ export default function Home() {
   const [rankings, setRankings] = useState<TeamScored[] | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [snapshots, setSnapshots] = useState<SnapshotDay[] | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("rank");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -257,6 +274,11 @@ export default function Home() {
         setUpdatedAt(data.updatedAt);
       })
       .catch((err) => setError(err.message));
+
+    fetch("/api/snapshots?from=2026-03-25")
+      .then((res) => res.json())
+      .then((data) => setSnapshots(data.snapshots))
+      .catch(() => {}); // Non-critical — chart just won't show
   }, []);
 
   if (error) {
@@ -383,14 +405,14 @@ export default function Home() {
                 </thead>
                 <tbody>
                   {sorted!.map((team) => (
-                    <TeamRow key={team.team} team={team} hittingRange={hittingRange} pitchingRange={pitchingRange} eraRange={eraRange} opsRange={opsRange} />
+                    <TeamRow key={team.team} team={team} hittingRange={hittingRange} pitchingRange={pitchingRange} eraRange={eraRange} opsRange={opsRange} snapshots={snapshots} />
                   ))}
                 </tbody>
               </table>
             </div>
 
             <p className="text-text-muted text-xs mt-6 text-center">
-              Live data from ESPN Fantasy Baseball &middot; Click any team for stat breakdown
+              Live data from ESPN Fantasy Baseball &middot; Click any team for points graph
               {updatedAt && (
                 <>
                   <br />
