@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { type TeamScored } from "@/lib/data";
 
-type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore" | "era" | "moves";
+type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore" | "era" | "moves" | "hr";
 type SortDir = "asc" | "desc";
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -141,6 +141,9 @@ function TeamRow({ team, hittingRange, pitchingRange }: { team: TeamScored; hitt
         <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary">
           {team.era.toFixed(2)}
         </td>
+        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary">
+          {team.raw.HR}
+        </td>
         <td className="py-3 pr-4 text-center">
           <StreakBadge streak={team.streak} />
         </td>
@@ -150,7 +153,7 @@ function TeamRow({ team, hittingRange, pitchingRange }: { team: TeamScored; hitt
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={9} className="bg-surface-2/30 px-4 py-4">
+          <td colSpan={10} className="bg-surface-2/30 px-4 py-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-3xl">
               <StatBreakdownTable
                 breakdown={team.hittingBreakdown}
@@ -210,6 +213,8 @@ export default function Home() {
       let cmp: number;
       if (sortKey === "team") {
         cmp = a.team.localeCompare(b.team);
+      } else if (sortKey === "hr") {
+        cmp = a.raw.HR - b.raw.HR;
       } else {
         cmp = (a[sortKey] as number) - (b[sortKey] as number);
       }
@@ -349,6 +354,12 @@ export default function Home() {
                       onClick={() => toggleSort("era")}
                     >
                       ERA<SortIcon active={sortKey === "era"} dir={sortDir} />
+                    </th>
+                    <th
+                      className="py-3 pr-3 text-right cursor-pointer select-none hover:text-text-secondary"
+                      onClick={() => toggleSort("hr")}
+                    >
+                      HR<SortIcon active={sortKey === "hr"} dir={sortDir} />
                     </th>
                     <th className="py-3 pr-4 text-center">Streak</th>
                     <th
