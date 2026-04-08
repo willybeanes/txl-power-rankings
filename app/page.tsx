@@ -163,7 +163,7 @@ function TeamRow({ team, hittingRange, pitchingRange, eraRange, opsRange, snapsh
           {team.era.toFixed(2)}
         </td>
         <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary" style={{ backgroundColor: heatColor(team.ops, opsRange[0], opsRange[1]) }}>
-          {team.ops.toFixed(3)}
+          {team.ops.toFixed(3).replace(/^0/, "")}
         </td>
         <td className="py-3 pr-4 text-center">
           <StreakBadge streak={team.streak} />
