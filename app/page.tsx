@@ -89,10 +89,11 @@ function StatBreakdownTable({
   );
 }
 
-/** Returns a background color from red (0) → white (0.5) → blue (1) */
-function heatColor(value: number, min: number, max: number): string {
+/** Returns a background color. Default: high=red, low=blue. Pass reverse=true for high=blue, low=red. */
+function heatColor(value: number, min: number, max: number, reverse = false): string {
   if (max === min) return "transparent";
-  const t = (value - min) / (max - min); // 0 = worst, 1 = best
+  let t = (value - min) / (max - min); // 0 → 1
+  if (reverse) t = 1 - t;
   if (t >= 0.5) {
     // upper half: white → red
     const strength = (t - 0.5) * 2; // 0 → 1
@@ -106,7 +107,7 @@ function heatColor(value: number, min: number, max: number): string {
   }
 }
 
-function TeamRow({ team, hittingRange, pitchingRange }: { team: TeamScored; hittingRange: [number, number]; pitchingRange: [number, number] }) {
+function TeamRow({ team, hittingRange, pitchingRange, eraRange, hrRange }: { team: TeamScored; hittingRange: [number, number]; pitchingRange: [number, number]; eraRange: [number, number]; hrRange: [number, number] }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -138,10 +139,10 @@ function TeamRow({ team, hittingRange, pitchingRange }: { team: TeamScored; hitt
         <td className="py-3 pr-3 text-right text-sm tabular-nums font-bold text-text-primary">
           {team.totalScore.toLocaleString()}
         </td>
-        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary">
+        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary" style={{ backgroundColor: heatColor(team.era, eraRange[0], eraRange[1], true) }}>
           {team.era.toFixed(2)}
         </td>
-        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary">
+        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary" style={{ backgroundColor: heatColor(team.raw.HR, hrRange[0], hrRange[1]) }}>
           {team.raw.HR}
         </td>
         <td className="py-3 pr-4 text-center">
@@ -232,6 +233,18 @@ export default function Home() {
   const pitchingRange = useMemo<[number, number]>(() => {
     if (!rankings) return [0, 0];
     const scores = rankings.map((t) => t.pitchingScore);
+    return [Math.min(...scores), Math.max(...scores)];
+  }, [rankings]);
+
+  const eraRange = useMemo<[number, number]>(() => {
+    if (!rankings) return [0, 0];
+    const scores = rankings.map((t) => t.era);
+    return [Math.min(...scores), Math.max(...scores)];
+  }, [rankings]);
+
+  const hrRange = useMemo<[number, number]>(() => {
+    if (!rankings) return [0, 0];
+    const scores = rankings.map((t) => t.raw.HR);
     return [Math.min(...scores), Math.max(...scores)];
   }, [rankings]);
 
@@ -372,7 +385,7 @@ export default function Home() {
                 </thead>
                 <tbody>
                   {sorted!.map((team) => (
-                    <TeamRow key={team.team} team={team} hittingRange={hittingRange} pitchingRange={pitchingRange} />
+                    <TeamRow key={team.team} team={team} hittingRange={hittingRange} pitchingRange={pitchingRange} eraRange={eraRange} hrRange={hrRange} />
                   ))}
                 </tbody>
               </table>
