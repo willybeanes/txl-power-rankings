@@ -83,8 +83,9 @@ export async function GET(request: Request) {
     const date = scoringPeriodToDate(period);
 
     // Fetch roster for this specific scoring period to get AB/PA
+    // Must use mRoster view (not mMatchup) to get per-day player stat splits
     const rosterRes = await fetch(
-      `${ESPN_API_BASE}/${leagueId}?view=mMatchup&view=mMatchupScore&scoringPeriodId=${period}`,
+      `${ESPN_API_BASE}/${leagueId}?view=mRoster&view=mTeam&scoringPeriodId=${period}`,
       { headers: { Cookie: cookieHeader } }
     );
 
@@ -94,30 +95,25 @@ export async function GET(request: Request) {
     }
 
     const rosterData = await rosterRes.json();
-    const rosterSchedule = rosterData.schedule || [];
 
     // Build AB/PA per team for this period
     const abPaMap: Record<number, { ab: number; pa: number }> = {};
-    for (const matchup of rosterSchedule) {
-      for (const side of ["home", "away"] as const) {
-        const team = matchup[side];
-        if (!team) continue;
-        let ab = 0, pa = 0;
-        const roster = team.rosterForCurrentScoringPeriod?.entries || [];
-        for (const entry of roster) {
-          if (!ACTIVE_BATTER_SLOTS.has(entry.lineupSlotId)) continue;
-          const stats = entry.playerPoolEntry?.player?.stats || [];
-          const dayStats = stats.find(
-            (s: { statSplitTypeId: number; scoringPeriodId: number }) =>
-              s.statSplitTypeId === 5 && s.scoringPeriodId === period
-          );
-          if (dayStats?.stats) {
-            ab += dayStats.stats["0"] || 0;
-            pa += dayStats.stats["16"] || 0;
-          }
+    for (const team of rosterData.teams || []) {
+      let ab = 0, pa = 0;
+      const roster = team.roster?.entries || [];
+      for (const entry of roster) {
+        if (!ACTIVE_BATTER_SLOTS.has(entry.lineupSlotId)) continue;
+        const stats = entry.playerPoolEntry?.player?.stats || [];
+        const dayStats = stats.find(
+          (s: { statSplitTypeId: number; scoringPeriodId: number }) =>
+            s.statSplitTypeId === 5 && s.scoringPeriodId === period
+        );
+        if (dayStats?.stats) {
+          ab += dayStats.stats["0"] || 0;
+          pa += dayStats.stats["16"] || 0;
         }
-        abPaMap[team.teamId] = { ab, pa };
       }
+      abPaMap[team.id] = { ab, pa };
     }
 
     // Build snapshot for this day
