@@ -125,11 +125,22 @@ export function computePlayoffOdds(
   const { entries, currentMatchupPeriod } = scheduleData;
   const remaining = entries.filter((e) => e.matchupPeriodId >= currentMatchupPeriod);
 
-  // Average weekly score as team strength proxy (totalScore / games played)
-  const avgPts: Record<string, number> = {};
-  for (const t of teams) {
+  // Compute raw weekly averages, then shrink toward league mean.
+  // With few games played, teams look nearly equal (appropriate uncertainty);
+  // as the season progresses, actual performance weight increases.
+  // PRIOR_GAMES controls regression speed — higher = more shrinkage early on.
+  const PRIOR_GAMES = 6;
+  const rawAvgs = teams.map((t) => {
     const games = t.raw.matchupWins + t.raw.matchupLosses;
-    avgPts[t.team] = games > 0 ? t.totalScore / games : t.totalScore;
+    return games > 0 ? t.totalScore / games : t.totalScore;
+  });
+  const leagueAvg = rawAvgs.reduce((s, v) => s + v, 0) / rawAvgs.length;
+
+  const avgPts: Record<string, number> = {};
+  for (let i = 0; i < teams.length; i++) {
+    const t = teams[i];
+    const games = t.raw.matchupWins + t.raw.matchupLosses;
+    avgPts[t.team] = (games * rawAvgs[i] + PRIOR_GAMES * leagueAvg) / (games + PRIOR_GAMES);
   }
 
   const playoffCounts: Record<string, number> = Object.fromEntries(teams.map((t) => [t.team, 0]));
@@ -145,8 +156,8 @@ export function computePlayoffOdds(
     for (const m of remaining) {
       const meanH = avgPts[m.homeTeam] ?? 100;
       const meanA = avgPts[m.awayTeam] ?? 100;
-      const ptsH = sampleNormal(meanH, meanH * 0.15);
-      const ptsA = sampleNormal(meanA, meanA * 0.15);
+      const ptsH = sampleNormal(meanH, meanH * 0.25);
+      const ptsA = sampleNormal(meanA, meanA * 0.25);
       pts[m.homeTeam] = (pts[m.homeTeam] ?? 0) + ptsH;
       pts[m.awayTeam] = (pts[m.awayTeam] ?? 0) + ptsA;
       if (ptsH >= ptsA) {
