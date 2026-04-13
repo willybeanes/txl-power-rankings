@@ -108,10 +108,21 @@ export function calcPitching(t: TeamRawStats) {
   return { breakdown, total };
 }
 
-function sampleNormal(mean: number, std: number): number {
+/** Seeded PRNG (mulberry32) — same seed produces identical sequence. */
+function makeRng(seed: number): () => number {
+  let s = seed;
+  return () => {
+    s |= 0; s = s + 0x6D2B79F5 | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function sampleNormal(mean: number, std: number, rng: () => number): number {
   // Box-Muller transform
-  const u1 = Math.random() || 1e-10;
-  const u2 = Math.random();
+  const u1 = rng() || 1e-10;
+  const u2 = rng();
   const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
   return Math.max(0, mean + std * z);
 }
@@ -143,6 +154,10 @@ export function computePlayoffOdds(
     avgPts[t.team] = (games * rawAvgs[i] + PRIOR_GAMES * leagueAvg) / (games + PRIOR_GAMES);
   }
 
+  // Seed by ISO week number so results are stable for the entire week
+  const weekSeed = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
+  const rng = makeRng(weekSeed);
+
   const playoffCounts: Record<string, number> = Object.fromEntries(teams.map((t) => [t.team, 0]));
 
   for (let sim = 0; sim < numSims; sim++) {
@@ -156,8 +171,8 @@ export function computePlayoffOdds(
     for (const m of remaining) {
       const meanH = avgPts[m.homeTeam] ?? 100;
       const meanA = avgPts[m.awayTeam] ?? 100;
-      const ptsH = sampleNormal(meanH, meanH * 0.25);
-      const ptsA = sampleNormal(meanA, meanA * 0.25);
+      const ptsH = sampleNormal(meanH, meanH * 0.25, rng);
+      const ptsA = sampleNormal(meanA, meanA * 0.25, rng);
       pts[m.homeTeam] = (pts[m.homeTeam] ?? 0) + ptsH;
       pts[m.awayTeam] = (pts[m.awayTeam] ?? 0) + ptsA;
       if (ptsH >= ptsA) {
