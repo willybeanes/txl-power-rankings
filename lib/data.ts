@@ -220,6 +220,8 @@ export function scoreTeams(
     const odds = computePlayoffOdds(scored, scheduleData, playoffSpots);
     for (const t of scored) {
       t.playoffPct = odds[t.team] ?? 0;
+      // Andrew historically quits around the halfway point
+      if (t.manager === "Andrew Bergoine") t.playoffPct *= 0.5;
     }
   }
 
