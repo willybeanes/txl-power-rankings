@@ -51,6 +51,18 @@ export interface TeamScored {
   pitchingBreakdown: Record<string, { raw: number; mult: number; pts: number }>;
   era: number;
   ops: number;
+  playoffPct: number;
+}
+
+export interface ScheduleEntry {
+  matchupPeriodId: number;
+  homeTeam: string;
+  awayTeam: string;
+}
+
+export interface ScheduleData {
+  entries: ScheduleEntry[];
+  currentMatchupPeriod: number;
 }
 
 export function calcHitting(t: TeamRawStats) {
@@ -96,9 +108,72 @@ export function calcPitching(t: TeamRawStats) {
   return { breakdown, total };
 }
 
+function sampleNormal(mean: number, std: number): number {
+  // Box-Muller transform
+  const u1 = Math.random() || 1e-10;
+  const u2 = Math.random();
+  const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  return Math.max(0, mean + std * z);
+}
+
+export function computePlayoffOdds(
+  teams: TeamScored[],
+  scheduleData: ScheduleData,
+  playoffSpots: number = 8,
+  numSims: number = 5000
+): Record<string, number> {
+  const { entries, currentMatchupPeriod } = scheduleData;
+  const remaining = entries.filter((e) => e.matchupPeriodId >= currentMatchupPeriod);
+
+  // Average weekly score as team strength proxy (totalScore / games played)
+  const avgPts: Record<string, number> = {};
+  for (const t of teams) {
+    const games = t.raw.matchupWins + t.raw.matchupLosses;
+    avgPts[t.team] = games > 0 ? t.totalScore / games : t.totalScore;
+  }
+
+  const playoffCounts: Record<string, number> = Object.fromEntries(teams.map((t) => [t.team, 0]));
+
+  for (let sim = 0; sim < numSims; sim++) {
+    const wins: Record<string, number> = {};
+    const pts: Record<string, number> = {};
+    for (const t of teams) {
+      wins[t.team] = t.raw.matchupWins;
+      pts[t.team] = t.totalScore;
+    }
+
+    for (const m of remaining) {
+      const meanH = avgPts[m.homeTeam] ?? 100;
+      const meanA = avgPts[m.awayTeam] ?? 100;
+      const ptsH = sampleNormal(meanH, meanH * 0.15);
+      const ptsA = sampleNormal(meanA, meanA * 0.15);
+      pts[m.homeTeam] = (pts[m.homeTeam] ?? 0) + ptsH;
+      pts[m.awayTeam] = (pts[m.awayTeam] ?? 0) + ptsA;
+      if (ptsH >= ptsA) {
+        wins[m.homeTeam] = (wins[m.homeTeam] ?? 0) + 1;
+      } else {
+        wins[m.awayTeam] = (wins[m.awayTeam] ?? 0) + 1;
+      }
+    }
+
+    const sorted = Object.keys(wins).sort((a, b) =>
+      wins[b] !== wins[a] ? wins[b] - wins[a] : pts[b] - pts[a]
+    );
+    for (let i = 0; i < Math.min(playoffSpots, sorted.length); i++) {
+      playoffCounts[sorted[i]]++;
+    }
+  }
+
+  return Object.fromEntries(
+    Object.entries(playoffCounts).map(([team, count]) => [team, (count / numSims) * 100])
+  );
+}
+
 export function scoreTeams(
   teams: TeamRawStats[],
-  trackedAbPa?: Record<string, { ab: number; pa: number }>
+  trackedAbPa?: Record<string, { ab: number; pa: number }>,
+  scheduleData?: ScheduleData,
+  playoffSpots: number = 8
 ): TeamScored[] {
   const scored = teams.map((t) => {
     const hitting = calcHitting(t);
@@ -124,9 +199,18 @@ export function scoreTeams(
       pitchingBreakdown: pitching.breakdown,
       era: t.Outs > 0 ? (t.ER / (t.Outs / 3)) * 9 : 0,
       ops: obp + slg,
+      playoffPct: 0,
     };
   });
   scored.sort((a, b) => b.totalScore - a.totalScore);
   scored.forEach((t, i) => (t.rank = i + 1));
+
+  if (scheduleData) {
+    const odds = computePlayoffOdds(scored, scheduleData, playoffSpots);
+    for (const t of scored) {
+      t.playoffPct = odds[t.team] ?? 0;
+    }
+  }
+
   return scored;
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { fetchESPNData } from "@/lib/espn";
-import { scoreTeams } from "@/lib/data";
+import { fetchESPNData, fetchSchedule } from "@/lib/espn";
+import { scoreTeams, type ScheduleData } from "@/lib/data";
 
 async function fetchTrackedAbPa(): Promise<Record<string, { ab: number; pa: number }>> {
   try {
@@ -27,13 +27,22 @@ async function fetchTrackedAbPa(): Promise<Record<string, { ab: number; pa: numb
   }
 }
 
+async function fetchScheduleSafe(): Promise<ScheduleData | undefined> {
+  try {
+    return await fetchSchedule();
+  } catch {
+    return undefined;
+  }
+}
+
 export async function GET() {
   try {
-    const [teams, trackedAbPa] = await Promise.all([
+    const [teams, trackedAbPa, scheduleData] = await Promise.all([
       fetchESPNData(),
       fetchTrackedAbPa(),
+      fetchScheduleSafe(),
     ]);
-    const rankings = scoreTeams(teams, trackedAbPa);
+    const rankings = scoreTeams(teams, trackedAbPa, scheduleData, 8);
     return NextResponse.json({ rankings, updatedAt: new Date().toISOString() });
   } catch (error) {
     console.error("ESPN fetch error:", error);

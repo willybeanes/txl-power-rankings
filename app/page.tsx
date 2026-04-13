@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { type TeamScored } from "@/lib/data";
 
-type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore" | "era" | "moves" | "ops";
+type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore" | "era" | "moves" | "ops" | "playoffPct";
 type SortDir = "asc" | "desc";
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -171,10 +171,13 @@ function TeamRow({ team, hittingRange, pitchingRange, eraRange, opsRange, snapsh
         <td className="py-3 pr-4 text-center text-xs text-text-muted tabular-nums">
           {team.moves}
         </td>
+        <td className="py-3 pr-4 text-right text-sm tabular-nums text-text-secondary">
+          {team.playoffPct.toFixed(1)}%
+        </td>
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={10} className="bg-surface-2/30 px-4 py-4">
+          <td colSpan={11} className="bg-surface-2/30 px-4 py-4">
             <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
               Cumulative Points
             </h4>
@@ -400,6 +403,12 @@ export default function Home() {
                       onClick={() => toggleSort("moves")}
                     >
                       Moves<SortIcon active={sortKey === "moves"} dir={sortDir} />
+                    </th>
+                    <th
+                      className="py-3 pr-4 text-right cursor-pointer select-none hover:text-text-secondary"
+                      onClick={() => toggleSort("playoffPct")}
+                    >
+                      Playoff%<SortIcon active={sortKey === "playoffPct"} dir={sortDir} />
                     </th>
                   </tr>
                 </thead>

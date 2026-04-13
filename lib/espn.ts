@@ -1,4 +1,4 @@
-import { type TeamRawStats } from "./data";
+import { type TeamRawStats, type ScheduleEntry, type ScheduleData } from "./data";
 
 const ESPN_API_BASE = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/seasons/2026/segments/0/leagues";
 
@@ -171,6 +171,39 @@ export async function fetchESPNData(): Promise<TeamRawStats[]> {
 
     return raw;
   });
+}
+
+export async function fetchSchedule(): Promise<ScheduleData> {
+  const leagueId = process.env.ESPN_LEAGUE_ID;
+  const espnS2 = process.env.ESPN_S2;
+  const swid = process.env.ESPN_SWID;
+  if (!leagueId || !espnS2 || !swid) throw new Error("Missing ESPN env vars");
+  const cookieHeader = `espn_s2=${espnS2}; SWID=${swid}`;
+  const cacheOpts = { next: { revalidate: 300 } } as const;
+
+  const [metaRes, matchupRes] = await Promise.all([
+    fetch(`${ESPN_API_BASE}/${leagueId}?view=mTeam`, { headers: { Cookie: cookieHeader }, ...cacheOpts }),
+    fetch(`${ESPN_API_BASE}/${leagueId}?view=mMatchup`, { headers: { Cookie: cookieHeader }, ...cacheOpts }),
+  ]);
+  if (!metaRes.ok || !matchupRes.ok) throw new Error("ESPN schedule fetch failed");
+  const [metaData, matchupData] = await Promise.all([metaRes.json(), matchupRes.json()]);
+
+  const currentMatchupPeriod: number = metaData.status?.currentMatchupPeriod ?? 1;
+
+  const teamNames: Record<number, string> = {};
+  for (const t of metaData.teams || []) teamNames[t.id] = t.name;
+
+  const entries: ScheduleEntry[] = [];
+  for (const matchup of matchupData.schedule || []) {
+    if (!matchup.home || !matchup.away) continue;
+    entries.push({
+      matchupPeriodId: matchup.matchupPeriodId,
+      homeTeam: teamNames[matchup.home.teamId] ?? `Team ${matchup.home.teamId}`,
+      awayTeam: teamNames[matchup.away.teamId] ?? `Team ${matchup.away.teamId}`,
+    });
+  }
+
+  return { entries, currentMatchupPeriod };
 }
 
 export interface TeamDailyDetails {
