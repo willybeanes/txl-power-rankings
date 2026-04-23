@@ -193,7 +193,7 @@ export const DRAFT_PICKS: DraftPick[] = [
   { round: 14, colOrder: 11, manager: "Mike Porter", player: "Munetaka Murakami", isKeeper: false, isExtra: false },
   { round: 15, colOrder:  1, manager: "Andrew Bergoine", player: "Joey Cantillo", isKeeper: false, isExtra: false },
   { round: 15, colOrder:  2, manager: "Austin Brennen", player: "Jacob de Grom", isKeeper: true, isExtra: false },
-  { round: 15, colOrder:  4, manager: "Charley Tauer", player: "Yennier Ponce", isKeeper: false, isExtra: false },
+  { round: 15, colOrder:  4, manager: "Charley Tauer", player: "Cody Ponce", isKeeper: false, isExtra: false },
   { round: 15, colOrder:  4, manager: "Charley Tauer", player: "Josh Hader", isKeeper: false, isExtra: false },
   { round: 15, colOrder:  5, manager: "Artie Arredondo", player: "Samuel Basallo", isKeeper: false, isExtra: false },
   { round: 15, colOrder:  6, manager: "Josh", player: "Will Warren", isKeeper: false, isExtra: false },
