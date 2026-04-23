@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { type TeamScored } from "@/lib/data";
+import { DRAFT_PICKS, DRAFT_MANAGERS, type DraftPick } from "@/lib/draft";
 
 type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore" | "era" | "moves" | "ops" | "playoffPct";
 type SortDir = "asc" | "desc";
-type Tab = "standings" | "graphs";
+type Tab = "standings" | "graphs" | "draft";
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   return (
@@ -246,6 +247,228 @@ function TeamRow({
   );
 }
 
+type DraftView = "board" | "roster";
+
+function DraftBoard() {
+  const [view, setView] = useState<DraftView>("board");
+
+  // Group picks for board view: round -> draftOrder -> picks[]
+  const grid = useMemo(() => {
+    const g: Record<number, Record<number, DraftPick[]>> = {};
+    for (const pick of DRAFT_PICKS) {
+      if (!g[pick.round]) g[pick.round] = {};
+      if (!g[pick.round][pick.draftOrder]) g[pick.round][pick.draftOrder] = [];
+      g[pick.round][pick.draftOrder].push(pick);
+    }
+    return g;
+  }, []);
+
+  // Group picks for roster view: manager -> picks[] sorted by round
+  const rosters = useMemo(() => {
+    const r: Record<string, DraftPick[]> = {};
+    for (const pick of DRAFT_PICKS) {
+      if (!r[pick.manager]) r[pick.manager] = [];
+      r[pick.manager].push(pick);
+    }
+    for (const key of Object.keys(r)) {
+      r[key].sort((a, b) => a.round - b.round);
+    }
+    return r;
+  }, []);
+
+  const rounds = useMemo(
+    () => Array.from(new Set(DRAFT_PICKS.map((p) => p.round))).sort((a, b) => a - b),
+    []
+  );
+
+  const pickStyle = (pick: DraftPick) =>
+    pick.isKeeper
+      ? "bg-[#ccf2f2] text-[#0f6b6b] font-semibold"
+      : pick.isExtra
+        ? "bg-blue-100 text-blue-700"
+        : "text-text-primary";
+
+  return (
+    <div>
+      {/* Legend + view toggle */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-4 text-xs text-text-secondary">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm bg-[#ccf2f2] border border-[#0f6b6b]/20" />
+            Keeper
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm bg-blue-100 border border-blue-200" />
+            Extra pick (traded)
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm bg-surface-2/50 border border-border/50" />
+            No pick (traded away)
+          </span>
+        </div>
+        <div className="flex rounded-lg border border-border overflow-hidden text-xs">
+          {(["board", "roster"] as DraftView[]).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`px-3 py-1.5 font-medium transition-colors capitalize ${
+                view === v
+                  ? "bg-brand-red text-white"
+                  : "text-text-muted hover:text-text-secondary hover:bg-surface-2/50"
+              }`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {view === "board" ? (
+        <div className="overflow-x-auto rounded-[14px] border border-border bg-surface">
+          <table className="w-full text-[11px] border-collapse" style={{ minWidth: 980 }}>
+            <thead>
+              <tr className="border-b border-border bg-surface-2/50">
+                <th className="py-2 px-2 text-center text-text-muted font-semibold w-8 sticky left-0 bg-surface-2/50 z-10 border-r border-border">
+                  Rd
+                </th>
+                {DRAFT_MANAGERS.map((mgr) => (
+                  <th
+                    key={mgr.draftOrder}
+                    className="py-2 px-1.5 text-center font-semibold text-text-secondary border-l border-border/50 whitespace-nowrap"
+                  >
+                    <div className="text-[11px]">{mgr.short}</div>
+                    <div className="text-[9px] text-text-muted font-normal">#{mgr.draftOrder}</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rounds.map((round, ri) => {
+                const isExtra = round > 25;
+                const prevRound = rounds[ri - 1];
+                const showSeparator = isExtra && prevRound && prevRound <= 25;
+                return (
+                  <>
+                    {showSeparator && (
+                      <tr key={`sep-${round}`}>
+                        <td
+                          colSpan={13}
+                          className="py-1 px-3 text-[9px] text-text-muted uppercase tracking-widest bg-surface-2/70 border-y border-border/50 text-center"
+                        >
+                          Extra picks from trades
+                        </td>
+                      </tr>
+                    )}
+                    <tr
+                      key={round}
+                      className={`border-t border-border/30 ${isExtra ? "bg-blue-50/20" : "hover:bg-surface-2/30"}`}
+                    >
+                      <td
+                        className={`py-1.5 px-2 text-center font-bold sticky left-0 z-10 border-r border-border/50 ${
+                          isExtra
+                            ? "text-blue-400 bg-blue-50/30"
+                            : "text-text-muted bg-surface"
+                        }`}
+                      >
+                        {round}
+                      </td>
+                      {DRAFT_MANAGERS.map((mgr) => {
+                        const cellPicks = grid[round]?.[mgr.draftOrder] ?? [];
+                        return (
+                          <td
+                            key={mgr.draftOrder}
+                            className="py-1 px-1 border-l border-border/30 align-top"
+                          >
+                            {cellPicks.length === 0 ? (
+                              <span className="text-text-muted/25 text-[10px]">—</span>
+                            ) : (
+                              <div className="flex flex-col gap-0.5">
+                                {cellPicks.map((pick, i) => (
+                                  <span
+                                    key={i}
+                                    className={`inline-block leading-snug px-1 py-0.5 rounded text-[11px] ${pickStyle(pick)}`}
+                                  >
+                                    {pick.player}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  </>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        /* Roster view */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {DRAFT_MANAGERS.map((mgr) => {
+            const picks = rosters[mgr.fullName] ?? [];
+            const keepers = picks.filter((p) => p.isKeeper);
+            return (
+              <div
+                key={mgr.draftOrder}
+                className="rounded-[14px] bg-surface border border-border overflow-hidden"
+              >
+                <div className="px-4 py-3 border-b border-border bg-surface-2/40 flex items-center justify-between">
+                  <div>
+                    <p className="font-bold text-text-primary text-sm">{mgr.fullName}</p>
+                    <p className="text-text-muted text-xs">Draft #{mgr.draftOrder}</p>
+                  </div>
+                  <span className="text-xs text-text-muted tabular-nums">
+                    {picks.length} picks
+                  </span>
+                </div>
+                <div className="divide-y divide-border/30">
+                  {picks.map((pick, i) => (
+                    <div
+                      key={i}
+                      className={`flex items-center justify-between px-4 py-1.5 text-xs ${
+                        pick.isKeeper
+                          ? "bg-[#ccf2f2]/40"
+                          : pick.isExtra
+                            ? "bg-blue-50/30"
+                            : ""
+                      }`}
+                    >
+                      <span
+                        className={
+                          pick.isKeeper
+                            ? "text-[#0f6b6b] font-semibold"
+                            : pick.isExtra
+                              ? "text-blue-700"
+                              : "text-text-primary"
+                        }
+                      >
+                        {pick.player}
+                        {pick.isKeeper && (
+                          <span className="ml-1 text-[9px] uppercase tracking-wide text-[#0f6b6b]/70">
+                            keep
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-text-muted tabular-nums ml-2">R{pick.round}</span>
+                    </div>
+                  ))}
+                </div>
+                {keepers.length > 0 && (
+                  <div className="px-4 py-2 bg-[#ccf2f2]/20 border-t border-border/30 text-[10px] text-[#0f6b6b]">
+                    Keepers: {keepers.map((p) => p.player).join(", ")}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LoadingSkeleton() {
   return (
     <div className="animate-pulse space-y-4">
@@ -363,7 +586,7 @@ export default function Home() {
 
         {/* Tabs */}
         <div className="flex gap-6 border-b border-border mb-6">
-          {(["standings", "graphs"] as Tab[]).map((tab) => (
+          {(["standings", "graphs", "draft"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -378,7 +601,17 @@ export default function Home() {
           ))}
         </div>
 
-        {!rankings ? (
+        {activeTab === "draft" ? (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-base font-bold text-text-primary">2026 Draft Board</h2>
+              <p className="text-text-muted text-xs mt-0.5">
+                12 teams · 25 rounds · snake draft · 3 keepers per team
+              </p>
+            </div>
+            <DraftBoard />
+          </div>
+        ) : !rankings ? (
           <LoadingSkeleton />
         ) : activeTab === "standings" ? (
           <>
