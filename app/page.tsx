@@ -5,6 +5,7 @@ import { type TeamScored } from "@/lib/data";
 
 type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore" | "era" | "moves" | "ops" | "playoffPct";
 type SortDir = "asc" | "desc";
+type Tab = "standings" | "graphs";
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   return (
@@ -34,74 +35,129 @@ interface SnapshotDay {
   teams: { team: string; dailyPoints?: number }[];
 }
 
-function CumulativeChart({ teamName, snapshots }: { teamName: string; snapshots: SnapshotDay[] }) {
-  const data = useMemo(() => {
-    let cum = 0;
-    return snapshots.map((snap) => {
-      const team = snap.teams.find((t) => t.team === teamName);
-      cum += team?.dailyPoints ?? 0;
-      return { date: snap.snapshot_date, cumulative: cum, daily: team?.dailyPoints ?? 0 };
-    });
-  }, [teamName, snapshots]);
+const CHART_COLORS = [
+  "#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6",
+  "#1abc9c", "#e67e22", "#d63031", "#6c5ce7", "#00b894", "#fd79a8",
+];
 
-  if (data.length === 0) return <p className="text-text-muted text-sm">No snapshot data available</p>;
+function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rankings: TeamScored[] }) {
+  const teamNames = rankings.map((t) => t.team);
+  const managers = Object.fromEntries(rankings.map((t) => [t.team, t.manager]));
 
-  const maxY = Math.max(...data.map((d) => d.cumulative), 1);
-  const W = 600;
-  const H = 200;
-  const padL = 50;
-  const padR = 16;
-  const padT = 20;
-  const padB = 32;
+  const cumData: Record<string, number[]> = useMemo(() => {
+    const result: Record<string, number[]> = {};
+    for (const name of teamNames) {
+      let cum = 0;
+      result[name] = snapshots.map((snap) => {
+        const t = snap.teams.find((s) => s.team === name);
+        cum += t?.dailyPoints ?? 0;
+        return cum;
+      });
+    }
+    return result;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshots, rankings]);
+
+  if (snapshots.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-48 text-text-muted text-sm">
+        No snapshot data available yet
+      </div>
+    );
+  }
+
+  const maxY = Math.max(...Object.values(cumData).flatMap((arr) => arr), 1);
+
+  const W = 780;
+  const H = 340;
+  const padL = 52;
+  const padR = 190;
+  const padT = 16;
+  const padB = 36;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
 
-  const x = (i: number) => padL + (i / (data.length - 1)) * plotW;
-  const y = (val: number) => padT + plotH - (val / maxY) * plotH;
+  const n = snapshots.length;
+  const xPos = (i: number) => (n <= 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW);
+  const yPos = (val: number) => padT + plotH - (val / maxY) * plotH;
 
-  const linePath = data.map((d, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(d.cumulative).toFixed(1)}`).join(" ");
+  const yTicks = 5;
+  const yTickVals = Array.from({ length: yTicks + 1 }, (_, i) =>
+    Math.round((maxY / yTicks) * i)
+  );
 
-  // Y-axis ticks
-  const yTicks = 4;
-  const yTickVals = Array.from({ length: yTicks + 1 }, (_, i) => Math.round((maxY / yTicks) * i));
+  const labelEvery = Math.ceil(n / 8);
 
   return (
     <div className="overflow-x-auto">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[600px]" style={{ minWidth: 400 }}>
-        {/* Grid lines */}
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 520 }}>
+        {/* Y-axis grid + labels */}
         {yTickVals.map((v) => (
           <g key={v}>
-            <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="#d8dce3" strokeWidth={0.5} />
-            <text x={padL - 6} y={y(v) + 3} textAnchor="end" fontSize={9} fill="#8892a4">{v}</text>
+            <line
+              x1={padL} x2={padL + plotW}
+              y1={yPos(v)} y2={yPos(v)}
+              stroke="#e2e8f0" strokeWidth={0.6}
+            />
+            <text x={padL - 6} y={yPos(v) + 3.5} textAnchor="end" fontSize={9} fill="#8892a4">
+              {v.toLocaleString()}
+            </text>
           </g>
         ))}
 
-        {/* Line */}
-        <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth={2} strokeLinejoin="round" />
-
-        {/* Area fill */}
-        <path
-          d={`${linePath} L${x(data.length - 1).toFixed(1)},${y(0).toFixed(1)} L${x(0).toFixed(1)},${y(0).toFixed(1)} Z`}
-          fill="rgba(59, 130, 246, 0.08)"
-        />
-
-        {/* Dots */}
-        {data.map((d, i) => (
-          <circle key={i} cx={x(i)} cy={y(d.cumulative)} r={3} fill="#3b82f6" />
-        ))}
-
-        {/* Value on last point */}
-        <text x={x(data.length - 1)} y={y(data[data.length - 1].cumulative) - 8} textAnchor="middle" fontSize={10} fontWeight={600} fill="#1a1d24">
-          {data[data.length - 1].cumulative.toLocaleString()}
-        </text>
+        {/* Team lines */}
+        {teamNames.map((name, ti) => {
+          const pts = cumData[name];
+          if (!pts || pts.length < 2) return null;
+          const d = pts
+            .map((v, i) => `${i === 0 ? "M" : "L"}${xPos(i).toFixed(1)},${yPos(v).toFixed(1)}`)
+            .join(" ");
+          return (
+            <path
+              key={name}
+              d={d}
+              fill="none"
+              stroke={CHART_COLORS[ti % CHART_COLORS.length]}
+              strokeWidth={1.8}
+              strokeLinejoin="round"
+              opacity={0.9}
+            />
+          );
+        })}
 
         {/* X-axis labels */}
-        {data.map((d, i) => {
-          // Show every 3rd label to avoid crowding, plus first and last
-          if (i !== 0 && i !== data.length - 1 && i % 3 !== 0) return null;
-          const label = d.date.slice(5); // MM-DD
+        {snapshots.map((snap, i) => {
+          if (i !== 0 && i !== n - 1 && i % labelEvery !== 0) return null;
           return (
-            <text key={i} x={x(i)} y={H - 6} textAnchor="middle" fontSize={8} fill="#8892a4">{label}</text>
+            <text
+              key={i}
+              x={xPos(i)}
+              y={H - padB + 14}
+              textAnchor="middle"
+              fontSize={8}
+              fill="#8892a4"
+            >
+              {snap.snapshot_date.slice(5)}
+            </text>
+          );
+        })}
+
+        {/* Legend */}
+        {teamNames.map((name, ti) => {
+          const lx = padL + plotW + 14;
+          const ly = padT + ti * 26;
+          const color = CHART_COLORS[ti % CHART_COLORS.length];
+          const lastVal = cumData[name]?.[n - 1] ?? 0;
+          return (
+            <g key={name}>
+              <rect x={lx} y={ly + 2} width={14} height={3} rx={1.5} fill={color} />
+              <text x={lx + 18} y={ly + 7} fontSize={9} fill="#374151" fontWeight={500}>
+                {managers[name] || name}
+              </text>
+              <text x={lx + 18} y={ly + 17} fontSize={8} fill="#8892a4">
+                {lastVal.toLocaleString()} pts
+              </text>
+            </g>
           );
         })}
       </svg>
@@ -112,84 +168,81 @@ function CumulativeChart({ teamName, snapshots }: { teamName: string; snapshots:
 /** Returns a background color. Default: high=red, low=blue. Pass reverse=true for high=blue, low=red. */
 function heatColor(value: number, min: number, max: number, reverse = false): string {
   if (max === min) return "transparent";
-  let t = (value - min) / (max - min); // 0 → 1
+  let t = (value - min) / (max - min);
   if (reverse) t = 1 - t;
   if (t >= 0.5) {
-    // upper half: white → red
-    const strength = (t - 0.5) * 2; // 0 → 1
-    const alpha = strength * 0.35;
-    return `rgba(239, 68, 68, ${alpha})`;
+    const strength = (t - 0.5) * 2;
+    return `rgba(239, 68, 68, ${strength * 0.35})`;
   } else {
-    // lower half: blue → white
-    const strength = (0.5 - t) * 2; // 0 → 1
-    const alpha = strength * 0.35;
-    return `rgba(59, 130, 246, ${alpha})`;
+    const strength = (0.5 - t) * 2;
+    return `rgba(59, 130, 246, ${strength * 0.35})`;
   }
 }
 
-function TeamRow({ team, hittingRange, pitchingRange, eraRange, opsRange, snapshots }: { team: TeamScored; hittingRange: [number, number]; pitchingRange: [number, number]; eraRange: [number, number]; opsRange: [number, number]; snapshots: SnapshotDay[] | null }) {
-  const [expanded, setExpanded] = useState(false);
-
+function TeamRow({
+  team,
+  hittingRange,
+  pitchingRange,
+  eraRange,
+  opsRange,
+}: {
+  team: TeamScored;
+  hittingRange: [number, number];
+  pitchingRange: [number, number];
+  eraRange: [number, number];
+  opsRange: [number, number];
+}) {
   return (
-    <>
-      <tr
-        onClick={() => setExpanded(!expanded)}
-        className="cursor-pointer hover:bg-surface-2/50 transition-colors border-t border-border/50"
+    <tr className="border-t border-border/50 hover:bg-surface-2/40 transition-colors">
+      <td className="py-3 pl-4 pr-2 tabular-nums text-text-muted font-semibold text-center w-10">
+        {team.rank}
+      </td>
+      <td className="py-3 pr-3">
+        <div className="flex flex-col">
+          <span className="font-semibold text-text-primary text-sm">{team.team}</span>
+          <span className="text-text-muted text-xs">{team.manager}</span>
+        </div>
+      </td>
+      <td className="py-3 pr-3 text-center text-sm tabular-nums text-text-secondary">
+        {team.record}
+      </td>
+      <td
+        className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary"
+        style={{ backgroundColor: heatColor(team.hittingScore, hittingRange[0], hittingRange[1]) }}
       >
-        <td className="py-3 pl-4 pr-2 tabular-nums text-text-muted font-semibold text-center w-10">
-          {team.rank}
-        </td>
-        <td className="py-3 pr-3">
-          <div className="flex flex-col">
-            <span className="font-semibold text-text-primary text-sm">
-              {team.team}
-            </span>
-            <span className="text-text-muted text-xs">{team.manager}</span>
-          </div>
-        </td>
-        <td className="py-3 pr-3 text-center text-sm tabular-nums text-text-secondary">
-          {team.record}
-        </td>
-        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary" style={{ backgroundColor: heatColor(team.hittingScore, hittingRange[0], hittingRange[1]) }}>
-          {team.hittingScore.toLocaleString()}
-        </td>
-        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary" style={{ backgroundColor: heatColor(team.pitchingScore, pitchingRange[0], pitchingRange[1]) }}>
-          {team.pitchingScore.toLocaleString()}
-        </td>
-        <td className="py-3 pr-3 text-right text-sm tabular-nums font-bold text-text-primary">
-          {team.totalScore.toLocaleString()}
-        </td>
-        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary" style={{ backgroundColor: heatColor(team.era, eraRange[0], eraRange[1], true) }}>
-          {team.era.toFixed(2)}
-        </td>
-        <td className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary" style={{ backgroundColor: heatColor(team.ops, opsRange[0], opsRange[1]) }}>
-          {team.ops.toFixed(3).replace(/^0/, "")}
-        </td>
-        <td className="py-3 pr-4 text-center">
-          <StreakBadge streak={team.streak} />
-        </td>
-        <td className="py-3 pr-4 text-center text-xs text-text-muted tabular-nums">
-          {team.moves}
-        </td>
-        <td className="py-3 pr-4 text-right text-sm tabular-nums text-text-secondary">
-          {team.playoffPct.toFixed(1)}%
-        </td>
-      </tr>
-      {expanded && (
-        <tr>
-          <td colSpan={11} className="bg-surface-2/30 px-4 py-4">
-            <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
-              Cumulative Points
-            </h4>
-            {snapshots ? (
-              <CumulativeChart teamName={team.team} snapshots={snapshots} />
-            ) : (
-              <p className="text-text-muted text-sm">Loading chart data...</p>
-            )}
-          </td>
-        </tr>
-      )}
-    </>
+        {team.hittingScore.toLocaleString()}
+      </td>
+      <td
+        className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary"
+        style={{ backgroundColor: heatColor(team.pitchingScore, pitchingRange[0], pitchingRange[1]) }}
+      >
+        {team.pitchingScore.toLocaleString()}
+      </td>
+      <td className="py-3 pr-3 text-right text-sm tabular-nums font-bold text-text-primary">
+        {team.totalScore.toLocaleString()}
+      </td>
+      <td
+        className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary"
+        style={{ backgroundColor: heatColor(team.era, eraRange[0], eraRange[1], true) }}
+      >
+        {team.era.toFixed(2)}
+      </td>
+      <td
+        className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary"
+        style={{ backgroundColor: heatColor(team.ops, opsRange[0], opsRange[1]) }}
+      >
+        {team.ops.toFixed(3).replace(/^0/, "")}
+      </td>
+      <td className="py-3 pr-4 text-center">
+        <StreakBadge streak={team.streak} />
+      </td>
+      <td className="py-3 pr-4 text-center text-xs text-text-muted tabular-nums">
+        {team.moves}
+      </td>
+      <td className="py-3 pr-4 text-right text-sm tabular-nums text-text-secondary">
+        {team.playoffPct.toFixed(1)}%
+      </td>
+    </tr>
   );
 }
 
@@ -217,6 +270,7 @@ export default function Home() {
   const [snapshots, setSnapshots] = useState<SnapshotDay[] | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("rank");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [activeTab, setActiveTab] = useState<Tab>("standings");
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -280,8 +334,8 @@ export default function Home() {
 
     fetch("/api/snapshots?from=2026-03-25")
       .then((res) => res.json())
-      .then((data) => setSnapshots(data.snapshots))
-      .catch(() => {}); // Non-critical — chart just won't show
+      .then((data) => setSnapshots(data.snapshots ?? []))
+      .catch(() => setSnapshots([]));
   }, []);
 
   if (error) {
@@ -298,17 +352,34 @@ export default function Home() {
   return (
     <main className="min-h-screen py-8 px-4 sm:px-6">
       <div className="max-w-5xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">
-            TXL Power Rankings
-          </h1>
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">TXL Power Rankings</h1>
           <p className="text-text-secondary mt-1">2026 Season</p>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-6 border-b border-border mb-6">
+          {(["standings", "graphs"] as Tab[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`pb-3 text-sm font-semibold capitalize border-b-2 -mb-px transition-colors ${
+                activeTab === tab
+                  ? "border-brand-red text-brand-red"
+                  : "border-transparent text-text-muted hover:text-text-secondary"
+              }`}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
         </div>
 
         {!rankings ? (
           <LoadingSkeleton />
-        ) : (
+        ) : activeTab === "standings" ? (
           <>
+            {/* Podium */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
               {rankings.slice(0, 3).map((team, i) => (
                 <div
@@ -324,11 +395,7 @@ export default function Home() {
                   <div className="flex items-start justify-between mb-2">
                     <span
                       className={`text-2xl font-bold ${
-                        i === 0
-                          ? "text-amber"
-                          : i === 1
-                            ? "text-text-secondary"
-                            : "text-amber/60"
+                        i === 0 ? "text-amber" : i === 1 ? "text-text-secondary" : "text-amber/60"
                       }`}
                     >
                       #{i + 1}
@@ -350,6 +417,7 @@ export default function Home() {
               ))}
             </div>
 
+            {/* Table */}
             <div className="rounded-[14px] bg-surface border border-border overflow-x-auto">
               <table className="w-full min-w-[700px]">
                 <thead>
@@ -414,14 +482,21 @@ export default function Home() {
                 </thead>
                 <tbody>
                   {sorted!.map((team) => (
-                    <TeamRow key={team.team} team={team} hittingRange={hittingRange} pitchingRange={pitchingRange} eraRange={eraRange} opsRange={opsRange} snapshots={snapshots} />
+                    <TeamRow
+                      key={team.team}
+                      team={team}
+                      hittingRange={hittingRange}
+                      pitchingRange={pitchingRange}
+                      eraRange={eraRange}
+                      opsRange={opsRange}
+                    />
                   ))}
                 </tbody>
               </table>
             </div>
 
             <p className="text-text-muted text-xs mt-6 text-center">
-              Live data from ESPN Fantasy Baseball &middot; Click any team for points graph
+              Live data from ESPN Fantasy Baseball
               {updatedAt && (
                 <>
                   <br />
@@ -430,6 +505,21 @@ export default function Home() {
               )}
             </p>
           </>
+        ) : (
+          /* Graphs tab */
+          <div className="rounded-[14px] bg-surface border border-border p-6">
+            <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">
+              Cumulative Points — Season to Date
+            </h2>
+            {snapshots === null ? (
+              <div className="animate-pulse h-64 bg-surface-2/50 rounded-lg" />
+            ) : (
+              <AllTeamsChart snapshots={snapshots} rankings={rankings} />
+            )}
+            <p className="text-text-muted text-xs mt-4">
+              Daily snapshots taken at ~11:55 PM ET · Each point represents one day&apos;s fantasy scoring
+            </p>
+          </div>
         )}
       </div>
     </main>
