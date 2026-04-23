@@ -249,8 +249,47 @@ function TeamRow({
 
 type DraftView = "board" | "roster";
 
+/** Normalize a player name for fuzzy matching: lowercase, strip accents & punctuation */
+function normName(s: string) {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9 ]/g, "")
+    .trim();
+}
+
+/** True if playerName appears in rosterList (accent/punctuation-insensitive) */
+function onRoster(playerName: string, rosterList: string[]): boolean {
+  const np = normName(playerName);
+  return rosterList.some((r) => normName(r) === np);
+}
+
+/**
+ * Map draft manager full name → ESPN API manager name.
+ * ESPN returns names like "Joshua Brooks" while the draft stores "Josh Brooks".
+ */
+function rosterKey(managerFullName: string, rosterMap: Record<string, string[]>): string | null {
+  // Exact match first
+  if (rosterMap[managerFullName]) return managerFullName;
+  // Last-name match as fallback (handles "Josh Brooks" ↔ "Joshua Brooks")
+  const lastName = managerFullName.split(" ").pop()!.toLowerCase();
+  const key = Object.keys(rosterMap).find(
+    (k) => k.split(" ").pop()!.toLowerCase() === lastName
+  );
+  return key ?? null;
+}
+
 function DraftBoard() {
   const [view, setView] = useState<DraftView>("board");
+  const [rosters, setRosters] = useState<Record<string, string[]> | null>(null);
+
+  useEffect(() => {
+    fetch("/api/rosters")
+      .then((r) => r.json())
+      .then((d) => setRosters(d.rosters ?? {}))
+      .catch(() => setRosters({}));
+  }, []);
 
   // Group picks for board view: round -> colOrder -> picks[]
   const grid = useMemo(() => {
@@ -264,7 +303,7 @@ function DraftBoard() {
   }, []);
 
   // Group picks for roster view: manager -> picks[] sorted by round
-  const rosters = useMemo(() => {
+  const rostersByManager = useMemo(() => {
     const r: Record<string, DraftPick[]> = {};
     for (const pick of DRAFT_PICKS) {
       if (!r[pick.manager]) r[pick.manager] = [];
@@ -281,12 +320,19 @@ function DraftBoard() {
     []
   );
 
-  const pickStyle = (pick: DraftPick) =>
-    pick.isKeeper
-      ? "bg-[#ccf2f2] text-[#0f6b6b] font-semibold"
-      : pick.isExtra
-        ? "bg-blue-100 text-blue-700"
-        : "text-text-primary";
+  const isDropped = (pick: DraftPick): boolean => {
+    if (!rosters) return false;
+    const key = rosterKey(pick.manager, rosters);
+    if (!key) return false; // unknown manager, don't grey
+    return !onRoster(pick.player, rosters[key]);
+  };
+
+  const pickStyle = (pick: DraftPick) => {
+    if (isDropped(pick)) return "text-text-muted/40 line-through";
+    if (pick.isKeeper) return "bg-[#ccf2f2] text-[#0f6b6b] font-semibold";
+    if (pick.isExtra) return "bg-blue-100 text-blue-700";
+    return "text-text-primary";
+  };
 
   return (
     <div>
@@ -304,6 +350,12 @@ function DraftBoard() {
           <span className="flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-sm bg-surface-2/50 border border-border/50" />
             No pick (traded away)
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-14 h-3 rounded-sm bg-surface-2/30 border border-border/30 overflow-hidden">
+              <span className="block text-[8px] text-text-muted/40 line-through leading-3 px-0.5">Player</span>
+            </span>
+            Dropped / traded
           </span>
         </div>
         <div className="flex rounded-lg border border-border overflow-hidden text-xs">
@@ -406,7 +458,7 @@ function DraftBoard() {
         /* Roster view */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {DRAFT_MANAGERS.map((mgr) => {
-            const picks = rosters[mgr.fullName] ?? [];
+            const picks = rostersByManager[mgr.fullName] ?? [];
             const keepers = picks.filter((p) => p.isKeeper);
             return (
               <div
@@ -423,36 +475,43 @@ function DraftBoard() {
                   </span>
                 </div>
                 <div className="divide-y divide-border/30">
-                  {picks.map((pick, i) => (
-                    <div
-                      key={i}
-                      className={`flex items-center justify-between px-4 py-1.5 text-xs ${
-                        pick.isKeeper
-                          ? "bg-[#ccf2f2]/40"
-                          : pick.isExtra
-                            ? "bg-blue-50/30"
-                            : ""
-                      }`}
-                    >
-                      <span
-                        className={
-                          pick.isKeeper
-                            ? "text-[#0f6b6b] font-semibold"
-                            : pick.isExtra
-                              ? "text-blue-700"
-                              : "text-text-primary"
-                        }
+                  {picks.map((pick, i) => {
+                    const dropped = isDropped(pick);
+                    return (
+                      <div
+                        key={i}
+                        className={`flex items-center justify-between px-4 py-1.5 text-xs ${
+                          dropped
+                            ? "opacity-40"
+                            : pick.isKeeper
+                              ? "bg-[#ccf2f2]/40"
+                              : pick.isExtra
+                                ? "bg-blue-50/30"
+                                : ""
+                        }`}
                       >
-                        {pick.player}
-                        {pick.isKeeper && (
-                          <span className="ml-1 text-[9px] uppercase tracking-wide text-[#0f6b6b]/70">
-                            keep
-                          </span>
-                        )}
-                      </span>
-                      <span className="text-text-muted tabular-nums ml-2">R{pick.round}</span>
-                    </div>
-                  ))}
+                        <span
+                          className={
+                            dropped
+                              ? "text-text-muted line-through"
+                              : pick.isKeeper
+                                ? "text-[#0f6b6b] font-semibold"
+                                : pick.isExtra
+                                  ? "text-blue-700"
+                                  : "text-text-primary"
+                          }
+                        >
+                          {pick.player}
+                          {pick.isKeeper && !dropped && (
+                            <span className="ml-1 text-[9px] uppercase tracking-wide text-[#0f6b6b]/70">
+                              keep
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-text-muted tabular-nums ml-2">R{pick.round}</span>
+                      </div>
+                    );
+                  })}
                 </div>
                 {keepers.length > 0 && (
                   <div className="px-4 py-2 bg-[#ccf2f2]/20 border-t border-border/30 text-[10px] text-[#0f6b6b]">
