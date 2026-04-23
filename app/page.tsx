@@ -404,16 +404,16 @@ function DraftBoard() {
 
       {view === "board" ? (
         <div className="overflow-x-auto rounded-[14px] border border-border bg-surface">
-          <table className="w-full text-[11px] border-collapse" style={{ minWidth: 980 }}>
+          <table className="w-full text-[10.5px] border-collapse">
             <thead>
               <tr className="border-b border-border bg-surface-2/50">
-                <th className="py-2 px-2 text-center text-text-muted font-semibold w-8 sticky left-0 bg-surface-2/50 z-10 border-r border-border">
+                <th className="py-1.5 px-1.5 text-center text-text-muted font-semibold w-7 sticky left-0 bg-surface-2/50 z-10 border-r border-border">
                   Rd
                 </th>
                 {DRAFT_MANAGERS.map((mgr) => (
                   <th
                     key={mgr.colOrder}
-                    className="py-2 px-1.5 text-center font-semibold text-text-secondary border-l border-border/50 whitespace-nowrap"
+                    className="py-1.5 px-1 text-center font-semibold text-text-secondary border-l border-border/50 whitespace-nowrap"
                   >
                     <div className="text-[11px]">{mgr.short}</div>
                   </th>
@@ -442,7 +442,7 @@ function DraftBoard() {
                       className={`border-t border-border/30 ${isExtra ? "bg-blue-50/20" : "hover:bg-surface-2/30"}`}
                     >
                       <td
-                        className={`py-1.5 px-2 text-center font-bold sticky left-0 z-10 border-r border-border/50 ${
+                        className={`py-1 px-1.5 text-center font-bold sticky left-0 z-10 border-r border-border/50 ${
                           isExtra
                             ? "text-blue-400 bg-blue-50/30"
                             : "text-text-muted bg-surface"
@@ -455,7 +455,7 @@ function DraftBoard() {
                         return (
                           <td
                             key={mgr.colOrder}
-                            className="py-1 px-1 border-l border-border/30 align-top"
+                            className="py-0.5 px-0.5 border-l border-border/30 align-top"
                           >
                             {cellPicks.length === 0 ? (
                               <span className="text-text-muted/25 text-[10px]">—</span>
@@ -466,7 +466,7 @@ function DraftBoard() {
                                   return (
                                     <span
                                       key={i}
-                                      className={`inline-block leading-snug px-1 py-0.5 rounded text-[11px] ${pickTextStyle(pick)}`}
+                                      className={`inline-block leading-snug px-1 py-px rounded text-[10.5px] ${pickTextStyle(pick)}`}
                                       style={{ backgroundColor: ptsBg(pick) }}
                                     >
                                       {pick.player}
@@ -671,7 +671,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen py-8 px-4 sm:px-6">
-      <div className="max-w-5xl mx-auto">
+      <div className={`mx-auto ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"}`}>
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">TXL Power Rankings</h1>
