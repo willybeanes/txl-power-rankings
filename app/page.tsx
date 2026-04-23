@@ -494,6 +494,21 @@ export default function Home() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [activeTab, setActiveTab] = useState<Tab>("standings");
 
+  // Sync tab with URL (?tab=standings|graphs|draft)
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get("tab");
+    if (param === "standings" || param === "graphs" || param === "draft") {
+      setActiveTab(param);
+    }
+  }, []);
+
+  const setTab = (tab: Tab) => {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    window.history.replaceState(null, "", url.toString());
+  };
+
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -588,7 +603,7 @@ export default function Home() {
           {(["standings", "graphs", "draft"] as Tab[]).map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => setTab(tab)}
               className={`pb-3 text-sm font-semibold capitalize border-b-2 -mb-px transition-colors ${
                 activeTab === tab
                   ? "border-brand-red text-brand-red"
