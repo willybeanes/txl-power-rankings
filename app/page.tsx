@@ -332,7 +332,10 @@ export default function Home() {
       })
       .catch((err) => setError(err.message));
 
-    fetch("/api/snapshots?from=2026-03-25")
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const toDate = yesterday.toISOString().split("T")[0];
+    fetch(`/api/snapshots?from=2026-03-25&to=${toDate}`)
       .then((res) => res.json())
       .then((data) => setSnapshots(data.snapshots ?? []))
       .catch(() => setSnapshots([]));
