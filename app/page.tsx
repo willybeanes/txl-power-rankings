@@ -283,13 +283,24 @@ function rosterKey(managerFullName: string, rosterMap: Record<string, string[]>)
 function DraftBoard() {
   const [view, setView] = useState<DraftView>("board");
   const [rosters, setRosters] = useState<Record<string, string[]> | null>(null);
+  const [playerPoints, setPlayerPoints] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetch("/api/rosters")
       .then((r) => r.json())
-      .then((d) => setRosters(d.rosters ?? {}))
-      .catch(() => setRosters({}));
+      .then((d) => {
+        setRosters(d.rosters ?? {});
+        setPlayerPoints(d.playerPoints ?? {});
+      })
+      .catch(() => { setRosters({}); setPlayerPoints({}); });
   }, []);
+
+  // Compute min/max of known player points for the heat scale
+  const [ptMin, ptMax] = useMemo(() => {
+    const vals = Object.values(playerPoints).filter((v) => v > 0);
+    if (vals.length === 0) return [0, 1];
+    return [Math.min(...vals), Math.max(...vals)];
+  }, [playerPoints]);
 
   // Group picks for board view: round -> colOrder -> picks[]
   const grid = useMemo(() => {
@@ -323,14 +334,30 @@ function DraftBoard() {
   const isDropped = (pick: DraftPick): boolean => {
     if (!rosters) return false;
     const key = rosterKey(pick.manager, rosters);
-    if (!key) return false; // unknown manager, don't grey
+    if (!key) return false;
     return !onRoster(pick.player, rosters[key]);
   };
 
-  const pickStyle = (pick: DraftPick) => {
+  /** Background color based on season points — high=red, low=blue, none if dropped */
+  const ptsBg = (pick: DraftPick): string => {
+    if (isDropped(pick)) return "";
+    const pts = playerPoints[pick.player];
+    if (pts == null) return "";
+    if (ptMax === ptMin) return "";
+    const t = Math.max(0, Math.min(1, (pts - ptMin) / (ptMax - ptMin)));
+    if (t >= 0.5) {
+      const a = ((t - 0.5) * 2 * 0.45).toFixed(2);
+      return `rgba(239,68,68,${a})`;
+    } else {
+      const a = ((0.5 - t) * 2 * 0.35).toFixed(2);
+      return `rgba(59,130,246,${a})`;
+    }
+  };
+
+  const pickTextStyle = (pick: DraftPick) => {
     if (isDropped(pick)) return "text-text-muted/40 line-through";
-    if (pick.isKeeper) return "bg-[#ccf2f2] text-[#0f6b6b] font-semibold";
-    if (pick.isExtra) return "bg-blue-100 text-blue-700";
+    if (pick.isKeeper) return "text-[#0f6b6b] font-semibold";
+    if (pick.isExtra) return "text-blue-700";
     return "text-text-primary";
   };
 
@@ -434,14 +461,21 @@ function DraftBoard() {
                               <span className="text-text-muted/25 text-[10px]">—</span>
                             ) : (
                               <div className="flex flex-col gap-0.5">
-                                {cellPicks.map((pick, i) => (
-                                  <span
-                                    key={i}
-                                    className={`inline-block leading-snug px-1 py-0.5 rounded text-[11px] ${pickStyle(pick)}`}
-                                  >
-                                    {pick.player}
-                                  </span>
-                                ))}
+                                {cellPicks.map((pick, i) => {
+                                  const pts = isDropped(pick) ? null : (playerPoints[pick.player] ?? null);
+                                  return (
+                                    <span
+                                      key={i}
+                                      className={`inline-block leading-snug px-1 py-0.5 rounded text-[11px] ${pickTextStyle(pick)}`}
+                                      style={{ backgroundColor: ptsBg(pick) }}
+                                    >
+                                      {pick.player}
+                                      {pts != null && (
+                                        <span className="ml-1 text-[9px] opacity-70">({pts})</span>
+                                      )}
+                                    </span>
+                                  );
+                                })}
                               </div>
                             )}
                           </td>
@@ -477,30 +511,14 @@ function DraftBoard() {
                 <div className="divide-y divide-border/30">
                   {picks.map((pick, i) => {
                     const dropped = isDropped(pick);
+                    const pts = dropped ? null : (playerPoints[pick.player] ?? null);
                     return (
                       <div
                         key={i}
-                        className={`flex items-center justify-between px-4 py-1.5 text-xs ${
-                          dropped
-                            ? "opacity-40"
-                            : pick.isKeeper
-                              ? "bg-[#ccf2f2]/40"
-                              : pick.isExtra
-                                ? "bg-blue-50/30"
-                                : ""
-                        }`}
+                        className={`flex items-center justify-between px-4 py-1.5 text-xs ${dropped ? "opacity-40" : ""}`}
+                        style={{ backgroundColor: ptsBg(pick) }}
                       >
-                        <span
-                          className={
-                            dropped
-                              ? "text-text-muted line-through"
-                              : pick.isKeeper
-                                ? "text-[#0f6b6b] font-semibold"
-                                : pick.isExtra
-                                  ? "text-blue-700"
-                                  : "text-text-primary"
-                          }
-                        >
+                        <span className={pickTextStyle(pick)}>
                           {pick.player}
                           {pick.isKeeper && !dropped && (
                             <span className="ml-1 text-[9px] uppercase tracking-wide text-[#0f6b6b]/70">
@@ -508,7 +526,10 @@ function DraftBoard() {
                             </span>
                           )}
                         </span>
-                        <span className="text-text-muted tabular-nums ml-2">R{pick.round}</span>
+                        <span className="tabular-nums ml-2 text-text-muted">
+                          {pts != null ? pts : ""}
+                          <span className="ml-1.5 opacity-50">R{pick.round}</span>
+                        </span>
                       </div>
                     );
                   })}

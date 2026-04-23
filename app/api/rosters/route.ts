@@ -26,23 +26,45 @@ export async function GET() {
 
   const data = await res.json();
 
-  // Build member ID -> display name from live API data
+  // Build member ID -> display name
   const memberNames: Record<string, string> = {};
   for (const m of data.members ?? []) {
     memberNames[m.id] = `${m.firstName} ${m.lastName}`.trim();
   }
 
-  // Build manager display name -> current player full names
+  // Build manager name -> current player list
+  // AND player name -> 2026 season total fantasy points
   const rosters: Record<string, string[]> = {};
+  const playerPoints: Record<string, number> = {};
+
   for (const team of data.teams ?? []) {
     const manager = memberNames[team.primaryOwner] ?? team.abbrev;
     const players: string[] = [];
+
     for (const entry of team.roster?.entries ?? []) {
-      const name: string | undefined = entry.playerPoolEntry?.player?.fullName;
-      if (name) players.push(name);
+      const player = entry.playerPoolEntry?.player;
+      if (!player) continue;
+
+      const name: string = player.fullName;
+      players.push(name);
+
+      // Season total: actual stats (source=0), full-season split (split=0),
+      // no specific scoring period (period=0), current season (2026)
+      const seasonStat = (player.stats ?? []).find(
+        (s: { statSourceId: number; statSplitTypeId: number; scoringPeriodId: number; seasonId: number }) =>
+          s.statSourceId === 0 &&
+          s.statSplitTypeId === 0 &&
+          s.scoringPeriodId === 0 &&
+          s.seasonId === 2026
+      );
+
+      if (seasonStat != null) {
+        playerPoints[name] = Math.round(seasonStat.appliedTotal);
+      }
     }
+
     rosters[manager] = players;
   }
 
-  return NextResponse.json({ rosters });
+  return NextResponse.json({ rosters, playerPoints });
 }
