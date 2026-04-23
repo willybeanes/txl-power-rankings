@@ -299,7 +299,7 @@ function DraftBoard() {
           </span>
           <span className="flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-sm bg-blue-100 border border-blue-200" />
-            Extra pick (traded)
+            Supplemental pick
           </span>
           <span className="flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-sm bg-surface-2/50 border border-border/50" />
@@ -354,7 +354,7 @@ function DraftBoard() {
                           colSpan={13}
                           className="py-1 px-3 text-[9px] text-text-muted uppercase tracking-widest bg-surface-2/70 border-y border-border/50 text-center"
                         >
-                          Extra picks from trades
+                          Supplemental Picks
                         </td>
                       </tr>
                     )}
