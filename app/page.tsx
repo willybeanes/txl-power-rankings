@@ -252,13 +252,13 @@ type DraftView = "board" | "roster";
 function DraftBoard() {
   const [view, setView] = useState<DraftView>("board");
 
-  // Group picks for board view: round -> draftOrder -> picks[]
+  // Group picks for board view: round -> colOrder -> picks[]
   const grid = useMemo(() => {
     const g: Record<number, Record<number, DraftPick[]>> = {};
     for (const pick of DRAFT_PICKS) {
       if (!g[pick.round]) g[pick.round] = {};
-      if (!g[pick.round][pick.draftOrder]) g[pick.round][pick.draftOrder] = [];
-      g[pick.round][pick.draftOrder].push(pick);
+      if (!g[pick.round][pick.colOrder]) g[pick.round][pick.colOrder] = [];
+      g[pick.round][pick.colOrder].push(pick);
     }
     return g;
   }, []);
@@ -333,11 +333,10 @@ function DraftBoard() {
                 </th>
                 {DRAFT_MANAGERS.map((mgr) => (
                   <th
-                    key={mgr.draftOrder}
+                    key={mgr.colOrder}
                     className="py-2 px-1.5 text-center font-semibold text-text-secondary border-l border-border/50 whitespace-nowrap"
                   >
                     <div className="text-[11px]">{mgr.short}</div>
-                    <div className="text-[9px] text-text-muted font-normal">#{mgr.draftOrder}</div>
                   </th>
                 ))}
               </tr>
@@ -373,10 +372,10 @@ function DraftBoard() {
                         {round}
                       </td>
                       {DRAFT_MANAGERS.map((mgr) => {
-                        const cellPicks = grid[round]?.[mgr.draftOrder] ?? [];
+                        const cellPicks = grid[round]?.[mgr.colOrder] ?? [];
                         return (
                           <td
-                            key={mgr.draftOrder}
+                            key={mgr.colOrder}
                             className="py-1 px-1 border-l border-border/30 align-top"
                           >
                             {cellPicks.length === 0 ? (
@@ -411,13 +410,13 @@ function DraftBoard() {
             const keepers = picks.filter((p) => p.isKeeper);
             return (
               <div
-                key={mgr.draftOrder}
+                key={mgr.colOrder}
                 className="rounded-[14px] bg-surface border border-border overflow-hidden"
               >
                 <div className="px-4 py-3 border-b border-border bg-surface-2/40 flex items-center justify-between">
                   <div>
                     <p className="font-bold text-text-primary text-sm">{mgr.fullName}</p>
-                    <p className="text-text-muted text-xs">Draft #{mgr.draftOrder}</p>
+                    <p className="text-text-muted text-xs">{mgr.fullName}</p>
                   </div>
                   <span className="text-xs text-text-muted tabular-nums">
                     {picks.length} picks
