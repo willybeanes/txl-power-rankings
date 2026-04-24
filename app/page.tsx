@@ -685,31 +685,33 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen py-8 px-4 sm:px-6">
-      <div className={`mx-auto ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"}`}>
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">TXL Power Rankings</h1>
-          <p className="text-text-secondary mt-1">2026 Season</p>
+    <main className="min-h-screen px-4 sm:px-6">
+      {/* Sticky header + tabs */}
+      <div className="sticky top-0 z-20 bg-[var(--bg)] border-b border-border">
+        <div className={`mx-auto ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"}`}>
+          <div className="pt-6 pb-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">TXL Power Rankings</h1>
+            <p className="text-text-secondary mt-0.5 text-sm">2026 Season</p>
+          </div>
+          <div className="flex gap-6 mt-3">
+            {(["standings", "graphs", "draft"] as Tab[]).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setTab(tab)}
+                className={`pb-3 text-sm font-semibold capitalize border-b-2 -mb-px transition-colors ${
+                  activeTab === tab
+                    ? "border-brand-red text-brand-red"
+                    : "border-transparent text-text-muted hover:text-text-secondary"
+                }`}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
+      </div>
 
-        {/* Tabs */}
-        <div className="flex gap-6 border-b border-border mb-6">
-          {(["standings", "graphs", "draft"] as Tab[]).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setTab(tab)}
-              className={`pb-3 text-sm font-semibold capitalize border-b-2 -mb-px transition-colors ${
-                activeTab === tab
-                  ? "border-brand-red text-brand-red"
-                  : "border-transparent text-text-muted hover:text-text-secondary"
-              }`}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
-        </div>
-
+      <div className={`mx-auto pt-6 pb-8 ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"}`}>
         {activeTab === "draft" ? (
           <div>
             <div className="mb-4">
