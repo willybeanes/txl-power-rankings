@@ -295,6 +295,21 @@ function DraftBoard() {
       .catch(() => { setRosters({}); setPlayerPoints({}); });
   }, []);
 
+  // Normalized points lookup: strips accents/punctuation so "Andrés Muñoz" matches ESPN's "Andres Munoz"
+  const normalizedPts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const [name, pts] of Object.entries(playerPoints)) {
+      m[normName(name)] = pts;
+    }
+    return m;
+  }, [playerPoints]);
+
+  const getPts = (playerName: string): number | undefined => {
+    const direct = playerPoints[playerName];
+    if (direct !== undefined) return direct;
+    return normalizedPts[normName(playerName)];
+  };
+
   // Compute min/max of known player points for the heat scale
   const [ptMin, ptMax] = useMemo(() => {
     const vals = Object.values(playerPoints).filter((v) => v > 0);
@@ -341,7 +356,7 @@ function DraftBoard() {
   /** Background color based on season points — high=red, low=blue, none if dropped */
   const ptsBg = (pick: DraftPick): string => {
     if (isDropped(pick)) return "";
-    const pts = playerPoints[pick.player];
+    const pts = getPts(pick.player);
     if (pts == null) return "";
     if (ptMax === ptMin) return "";
     const t = Math.max(0, Math.min(1, (pts - ptMin) / (ptMax - ptMin)));
@@ -462,7 +477,7 @@ function DraftBoard() {
                             ) : (
                               <div className="flex flex-col gap-0.5">
                                 {cellPicks.map((pick, i) => {
-                                  const pts = isDropped(pick) ? null : (playerPoints[pick.player] ?? null);
+                                  const pts = isDropped(pick) ? null : (getPts(pick.player) ?? null);
                                   return (
                                     <span
                                       key={i}
@@ -511,7 +526,7 @@ function DraftBoard() {
                 <div className="divide-y divide-border/30">
                   {picks.map((pick, i) => {
                     const dropped = isDropped(pick);
-                    const pts = dropped ? null : (playerPoints[pick.player] ?? null);
+                    const pts = dropped ? null : (getPts(pick.player) ?? null);
                     return (
                       <div
                         key={i}
