@@ -296,7 +296,7 @@ export const DRAFT_PICKS: DraftPick[] = [
   { round: 23, colOrder: 10, manager: "Kevin Katsuda", player: "Jarren Duran", isKeeper: true, isExtra: false },
   { round: 23, colOrder: 11, manager: "Mike Porter", player: "Wyatt Langford", isKeeper: true, isExtra: false },
   { round: 23, colOrder: 12, manager: "Patrick Harvey", player: "Garrett Whitlock", isKeeper: false, isExtra: false },
-  { round: 24, colOrder:  3, manager: "Stephan Mattke", player: "J Springs", isKeeper: false, isExtra: false },
+  { round: 24, colOrder:  3, manager: "Stephan Mattke", player: "Jeffrey Springs", isKeeper: false, isExtra: false },
   { round: 24, colOrder:  5, manager: "Artie Arredondo", player: "Daniel Palencia", isKeeper: false, isExtra: false },
   { round: 24, colOrder:  6, manager: "Josh Brooks", player: "Spencer Schwellenbach", isKeeper: false, isExtra: false },
   { round: 24, colOrder:  7, manager: "Mike Kyne", player: "Taj Bradley", isKeeper: false, isExtra: false },
