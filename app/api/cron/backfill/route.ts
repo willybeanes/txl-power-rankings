@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { fetchESPNData } from "@/lib/espn";
+import { scoreTeams } from "@/lib/data";
 import { getSupabase } from "@/lib/supabase";
 
 const ESPN_API_BASE =
@@ -32,114 +34,142 @@ export async function GET(request: Request) {
 
   const cookieHeader = `espn_s2=${espnS2}; SWID=${swid}`;
 
-  // Get current scoring period to know where to stop
-  const metaRes = await fetch(`${ESPN_API_BASE}/${leagueId}?view=mTeam`, {
-    headers: { Cookie: cookieHeader },
-  });
-  if (!metaRes.ok) {
-    return NextResponse.json({ error: "ESPN meta fetch failed" }, { status: 500 });
+  // Fetch current TXL totals (season to date) — used to scale the daily estimates
+  const [rawStats, matchupRes, metaRes] = await Promise.all([
+    fetchESPNData(),
+    fetch(`${ESPN_API_BASE}/${leagueId}?view=mMatchup&view=mMatchupScore`, {
+      headers: { Cookie: cookieHeader },
+    }),
+    fetch(`${ESPN_API_BASE}/${leagueId}?view=mTeam`, {
+      headers: { Cookie: cookieHeader },
+    }),
+  ]);
+
+  if (!matchupRes.ok || !metaRes.ok) {
+    return NextResponse.json({ error: "ESPN fetch failed" }, { status: 500 });
   }
-  const metaData = await metaRes.json();
+
+  const [matchupData, metaData] = await Promise.all([
+    matchupRes.json(),
+    metaRes.json(),
+  ]);
+
   const currentPeriod: number = metaData.scoringPeriodId;
 
-  // Build teamId -> teamName lookup
-  const teamNames: Record<number, string> = {};
-  for (const t of metaData.teams || []) {
-    teamNames[t.id] = t.name;
-  }
+  // Current TXL totals per team name
+  const scored = scoreTeams(rawStats);
+  const txlTotalByTeam = new Map(scored.map((t) => [t.team, t.totalScore]));
+  const managerByTeam = new Map(scored.map((t) => [t.team, t.manager]));
 
-  // Get all matchup data (contains pointsByScoringPeriod for all periods)
-  const matchupRes = await fetch(
-    `${ESPN_API_BASE}/${leagueId}?view=mMatchup&view=mMatchupScore`,
-    { headers: { Cookie: cookieHeader } }
-  );
-  if (!matchupRes.ok) {
-    return NextResponse.json({ error: "ESPN matchup fetch failed" }, { status: 500 });
-  }
-  const matchupData = await matchupRes.json();
-  const schedule = matchupData.schedule || [];
+  // Build teamId -> teamName
+  const teamNameById: Record<number, string> = {};
+  for (const t of metaData.teams || []) teamNameById[t.id] = t.name;
 
-  // Build a map of teamId -> { scoringPeriodId -> dailyPoints } across all matchups
-  const dailyPointsMap: Record<number, Record<number, number>> = {};
-  for (const matchup of schedule) {
+  // Build teamId -> { scoringPeriod -> espnDailyPoints }
+  const espnDailyById: Record<number, Record<number, number>> = {};
+  for (const matchup of matchupData.schedule || []) {
     for (const side of ["home", "away"] as const) {
       const team = matchup[side];
       if (!team) continue;
-      if (!dailyPointsMap[team.teamId]) dailyPointsMap[team.teamId] = {};
-      const pts = team.pointsByScoringPeriod || {};
-      for (const [period, points] of Object.entries(pts)) {
-        dailyPointsMap[team.teamId][Number(period)] = points as number;
+      if (!espnDailyById[team.teamId]) espnDailyById[team.teamId] = {};
+      for (const [period, pts] of Object.entries(team.pointsByScoringPeriod || {})) {
+        espnDailyById[team.teamId][Number(period)] = pts as number;
       }
     }
   }
 
-  const results: { date: string; status: string }[] = [];
+  // Compute cumulative ESPN totals per team per period, and overall season ESPN total
+  // We'll use these to scale to TXL totals
+  const espnCumByTeam: Record<number, number[]> = {}; // teamId -> cumulative per period
+  for (const [idStr, daily] of Object.entries(espnDailyById)) {
+    const id = Number(idStr);
+    let cum = 0;
+    espnCumByTeam[id] = [];
+    for (let p = 1; p < currentPeriod; p++) {
+      cum += daily[p] ?? 0;
+      espnCumByTeam[id][p] = cum;
+    }
+  }
 
-  // Backfill each scoring period from 1 to yesterday (currentPeriod - 1)
-  // Today's snapshot is handled by the regular cron
   const endPeriod = currentPeriod - 1;
+
+  // Fetch AB/PA data per period (one call per period, for OPS tracking)
+  // Run all fetches in parallel to speed up the backfill
+  const rosterFetches = Array.from({ length: endPeriod }, (_, i) => i + 1).map((period) =>
+    fetch(
+      `${ESPN_API_BASE}/${leagueId}?view=mRoster&view=mTeam&scoringPeriodId=${period}`,
+      { headers: { Cookie: cookieHeader } }
+    ).then((r) => (r.ok ? r.json() : null))
+  );
+  const rosterResults = await Promise.all(rosterFetches);
+
+  const results: { date: string; status: string }[] = [];
 
   for (let period = 1; period <= endPeriod; period++) {
     const date = scoringPeriodToDate(period);
-
-    // Fetch roster for this specific scoring period to get AB/PA
-    // Must use mRoster view (not mMatchup) to get per-day player stat splits
-    const rosterRes = await fetch(
-      `${ESPN_API_BASE}/${leagueId}?view=mRoster&view=mTeam&scoringPeriodId=${period}`,
-      { headers: { Cookie: cookieHeader } }
-    );
-
-    if (!rosterRes.ok) {
-      results.push({ date, status: `ESPN fetch failed: ${rosterRes.status}` });
-      continue;
-    }
-
-    const rosterData = await rosterRes.json();
+    const rosterData = rosterResults[period - 1];
 
     // Build AB/PA per team for this period
-    const abPaMap: Record<number, { ab: number; pa: number }> = {};
-    for (const team of rosterData.teams || []) {
-      let ab = 0, pa = 0;
-      const roster = team.roster?.entries || [];
-      for (const entry of roster) {
-        if (!ACTIVE_BATTER_SLOTS.has(entry.lineupSlotId)) continue;
-        const stats = entry.playerPoolEntry?.player?.stats || [];
-        const dayStats = stats.find(
-          (s: { statSplitTypeId: number; scoringPeriodId: number }) =>
-            s.statSplitTypeId === 5 && s.scoringPeriodId === period
-        );
-        if (dayStats?.stats) {
-          ab += dayStats.stats["0"] || 0;
-          pa += dayStats.stats["16"] || 0;
+    const abPaByTeamId: Record<number, { ab: number; pa: number }> = {};
+    if (rosterData) {
+      for (const team of rosterData.teams || []) {
+        let ab = 0, pa = 0;
+        for (const entry of team.roster?.entries || []) {
+          if (!ACTIVE_BATTER_SLOTS.has(entry.lineupSlotId)) continue;
+          const stats = entry.playerPoolEntry?.player?.stats || [];
+          const dayStats = stats.find(
+            (s: { statSplitTypeId: number; scoringPeriodId: number }) =>
+              s.statSplitTypeId === 5 && s.scoringPeriodId === period
+          );
+          if (dayStats?.stats) {
+            ab += dayStats.stats["0"] || 0;
+            pa += dayStats.stats["16"] || 0;
+          }
         }
+        abPaByTeamId[team.id] = { ab, pa };
       }
-      abPaMap[team.id] = { ab, pa };
     }
 
-    // Build snapshot for this day
-    const teams = Object.keys(teamNames).map((idStr) => {
-      const id = Number(idStr);
-      return {
-        team: teamNames[id],
-        manager: null,
+    // For each team, estimate TXL cumulative total through this period by scaling
+    // ESPN cumulative points proportionally to the known TXL season total.
+    //
+    //   txl_estimate[period] = (espn_cum[period] / espn_cum[final]) × txl_final
+    //
+    // This gives accurate day-to-day shape while landing on the exact TXL total.
+    const teams = [];
+    for (const [id, teamName] of Object.entries(teamNameById)) {
+      const numId = Number(id);
+      const txlFinal = txlTotalByTeam.get(teamName) ?? 0;
+      const espnCum = espnCumByTeam[numId]?.[period] ?? 0;
+      const espnFinal = espnCumByTeam[numId]?.[endPeriod] ?? 1;
+      const estimatedTxlTotal = espnFinal > 0
+        ? Math.round((espnCum / espnFinal) * txlFinal)
+        : 0;
+
+      // Daily delta = today's estimated total - yesterday's
+      const prevEstimate = period > 1
+        ? Math.round(((espnCumByTeam[numId]?.[period - 1] ?? 0) / espnFinal) * txlFinal)
+        : 0;
+      const dailyPoints = estimatedTxlTotal - prevEstimate;
+
+      teams.push({
+        team: teamName,
+        manager: managerByTeam.get(teamName) ?? null,
         rank: null,
         hittingScore: null,
         pitchingScore: null,
-        totalScore: null,
+        totalScore: estimatedTxlTotal,
         record: null,
         era: null,
-        dailyPoints: dailyPointsMap[id]?.[period] ?? 0,
-        trackedAB: abPaMap[id]?.ab ?? 0,
-        trackedPA: abPaMap[id]?.pa ?? 0,
-      };
-    });
+        dailyPoints,
+        trackedAB: abPaByTeamId[numId]?.ab ?? 0,
+        trackedPA: abPaByTeamId[numId]?.pa ?? 0,
+      });
+    }
 
     const { error } = await getSupabase()
       .from("daily_snapshots")
-      .upsert(
-        { snapshot_date: date, teams },
-        { onConflict: "snapshot_date" }
-      );
+      .upsert({ snapshot_date: date, teams }, { onConflict: "snapshot_date" });
 
     results.push({ date, status: error ? `Error: ${error.message}` : "ok" });
   }

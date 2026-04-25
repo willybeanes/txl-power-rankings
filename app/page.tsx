@@ -33,7 +33,7 @@ function StreakBadge({ streak }: { streak: string }) {
 
 interface SnapshotDay {
   snapshot_date: string;
-  teams: { team: string; dailyPoints?: number }[];
+  teams: { team: string; dailyPoints?: number; totalScore?: number }[];
 }
 
 const CHART_COLORS = [
@@ -48,11 +48,9 @@ function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rank
   const cumData: Record<string, number[]> = useMemo(() => {
     const result: Record<string, number[]> = {};
     for (const name of teamNames) {
-      let cum = 0;
       result[name] = snapshots.map((snap) => {
         const t = snap.teams.find((s) => s.team === name);
-        cum += t?.dailyPoints ?? 0;
-        return cum;
+        return t?.totalScore ?? 0;
       });
     }
     return result;
@@ -247,6 +245,172 @@ function TeamRow({
   );
 }
 
+// Keyed by normalized last name for resilience against ESPN casing/spacing quirks
+const HEADSHOTS_BY_LAST: Record<string, string> = {
+  "bergoine": "/headshots/Andrew.jpg",
+  "arredondo": "/headshots/Artie.jpeg",
+  "brennen":  "/headshots/Austin.jpg",
+  "tauer":    "/headshots/Charley.jpg",
+  "cook":     "/headshots/Darren.jpg",
+  "brooks":   "/headshots/Josh.jpg",
+  "katsuda":  "/headshots/Kevin Katsuda.jpg",
+  "kyne":     "/headshots/Mike Kyne.jpg",
+  "porter":   "/headshots/Michael Porter.jpg",
+  "harvey":   "/headshots/Patrick.jpg",
+  "mattke":   "/headshots/Stephan.jpg",
+  "harris":   "/headshots/Will.jpg",
+};
+
+function getHeadshot(manager: string): string | undefined {
+  const lastName = manager.trim().split(/\s+/).pop()?.toLowerCase() ?? "";
+  return HEADSHOTS_BY_LAST[lastName];
+}
+
+function PFPAScatter({ rankings }: { rankings: TeamScored[] }) {
+  const [hovered, setHovered] = useState<string | null>(null);
+  const R = 26; // headshot circle radius
+
+  const pfVals = rankings.map((t) => t.pointsFor);
+  const paVals = rankings.map((t) => t.pointsAgainst);
+  const pfMin = Math.min(...pfVals);
+  const pfMax = Math.max(...pfVals);
+  const paMin = Math.min(...paVals);
+  const paMax = Math.max(...paVals);
+
+  // Pad the axis range by 8% so headshots don't clip the edge
+  const pad = 0.08;
+  const pfRange = pfMax - pfMin || 1;
+  const paRange = paMax - paMin || 1;
+  const xMin = pfMin - pfRange * pad;
+  const xMax = pfMax + pfRange * pad;
+  const yMin = paMin - paRange * pad;
+  const yMax = paMax + paRange * pad;
+
+  const W = 680, H = 380;
+  const padL = 58, padR = 20, padT = 20, padB = 44;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  const xPos = (pf: number) => padL + ((pf - xMin) / (xMax - xMin)) * plotW;
+  const yPos = (pa: number) => padT + plotH - ((pa - yMin) / (yMax - yMin)) * plotH;
+
+  // Nice axis ticks
+  const xTicks = 5;
+  const yTicks = 5;
+  const xTickVals = Array.from({ length: xTicks + 1 }, (_, i) =>
+    Math.round(pfMin + (pfRange / xTicks) * i)
+  );
+  const yTickVals = Array.from({ length: yTicks + 1 }, (_, i) =>
+    Math.round(paMin + (paRange / yTicks) * i)
+  );
+
+  return (
+    <div className="overflow-x-auto">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 520 }}>
+        <defs>
+          {rankings.map((t) => (
+            <clipPath key={t.manager} id={`clip-${t.manager.replace(/\s+/g, "-")}`}>
+              <circle cx={xPos(t.pointsFor)} cy={yPos(t.pointsAgainst)} r={R} />
+            </clipPath>
+          ))}
+        </defs>
+
+        {/* Grid lines */}
+        {yTickVals.map((v) => (
+          <line key={`yg-${v}`} x1={padL} x2={padL + plotW} y1={yPos(v)} y2={yPos(v)}
+            stroke="var(--border)" strokeWidth={0.7} />
+        ))}
+        {xTickVals.map((v) => (
+          <line key={`xg-${v}`} x1={xPos(v)} x2={xPos(v)} y1={padT} y2={padT + plotH}
+            stroke="var(--border)" strokeWidth={0.7} />
+        ))}
+
+        {/* Axes */}
+        <line x1={padL} x2={padL + plotW} y1={padT + plotH} y2={padT + plotH}
+          stroke="var(--border)" strokeWidth={1} />
+        <line x1={padL} x2={padL} y1={padT} y2={padT + plotH}
+          stroke="var(--border)" strokeWidth={1} />
+
+        {/* Y tick labels */}
+        {yTickVals.map((v) => (
+          <text key={`yt-${v}`} x={padL - 6} y={yPos(v) + 3.5}
+            textAnchor="end" fontSize={9} fill="var(--text-muted)">
+            {v.toLocaleString()}
+          </text>
+        ))}
+
+        {/* X tick labels */}
+        {xTickVals.map((v) => (
+          <text key={`xt-${v}`} x={xPos(v)} y={padT + plotH + 14}
+            textAnchor="middle" fontSize={9} fill="var(--text-muted)">
+            {v.toLocaleString()}
+          </text>
+        ))}
+
+        {/* Axis labels */}
+        <text x={padL + plotW / 2} y={H - 2} textAnchor="middle" fontSize={10} fontWeight={600}
+          fill="var(--text-secondary)">
+          Points For
+        </text>
+        <text x={12} y={padT + plotH / 2} textAnchor="middle" fontSize={10} fontWeight={600}
+          fill="var(--text-secondary)"
+          transform={`rotate(-90, 12, ${padT + plotH / 2})`}>
+          Points Against
+        </text>
+
+        {/* Headshot circles — draw hovered last so it's on top */}
+        {[...rankings]
+          .sort((a, b) => (a.manager === hovered ? 1 : b.manager === hovered ? -1 : 0))
+          .map((t) => {
+            const cx = xPos(t.pointsFor);
+            const cy = yPos(t.pointsAgainst);
+            const clipId = `clip-${t.manager.replace(/\s+/g, "-")}`;
+            const isHovered = hovered === t.manager;
+            const imgSrc = getHeadshot(t.manager);
+            return (
+              <g key={t.manager}
+                onMouseEnter={() => setHovered(t.manager)}
+                onMouseLeave={() => setHovered(null)}
+                style={{ cursor: "pointer" }}>
+                {/* Shadow / border ring */}
+                <circle cx={cx} cy={cy} r={R + 2}
+                  fill={isHovered ? "var(--brand-red, #dc2f1f)" : "var(--border)"}
+                  opacity={isHovered ? 1 : 0.8} />
+                {/* Headshot image clipped to circle */}
+                {imgSrc ? (
+                  <image href={imgSrc} x={cx - R} y={cy - R} width={R * 2} height={R * 2}
+                    clipPath={`url(#${clipId})`}
+                    preserveAspectRatio="xMidYMid slice" />
+                ) : (
+                  <circle cx={cx} cy={cy} r={R} fill="var(--surface-2)" />
+                )}
+                {/* Tooltip on hover */}
+                {isHovered && (
+                  <g>
+                    <rect
+                      x={cx + R + 4} y={cy - 28}
+                      width={148} height={56}
+                      rx={6} fill="var(--surface)"
+                      stroke="var(--border)" strokeWidth={1}
+                    />
+                    <text x={cx + R + 12} y={cy - 12} fontSize={10} fontWeight={700}
+                      fill="var(--text-primary)">{t.team}</text>
+                    <text x={cx + R + 12} y={cy + 2} fontSize={9}
+                      fill="var(--text-muted)">{t.manager}</text>
+                    <text x={cx + R + 12} y={cy + 16} fontSize={9}
+                      fill="var(--text-secondary)">
+                      PF {t.pointsFor.toFixed(1)} · PA {t.pointsAgainst.toFixed(1)}
+                    </text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+      </svg>
+    </div>
+  );
+}
+
 type DraftView = "board" | "roster";
 
 /** Normalize a player name for fuzzy matching: lowercase, strip accents & punctuation */
@@ -284,6 +448,7 @@ function DraftBoard() {
   const [view, setView] = useState<DraftView>("board");
   const [rosters, setRosters] = useState<Record<string, string[]> | null>(null);
   const [playerPoints, setPlayerPoints] = useState<Record<string, number>>({});
+  const [teamNames, setTeamNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetch("/api/rosters")
@@ -291,8 +456,9 @@ function DraftBoard() {
       .then((d) => {
         setRosters(d.rosters ?? {});
         setPlayerPoints(d.playerPoints ?? {});
+        setTeamNames(d.teamNames ?? {});
       })
-      .catch(() => { setRosters({}); setPlayerPoints({}); });
+      .catch(() => { setRosters({}); setPlayerPoints({}); setTeamNames({}); });
   }, []);
 
   // Normalized points lookup: strips accents/punctuation so "Andrés Muñoz" matches ESPN's "Andres Munoz"
@@ -516,7 +682,12 @@ function DraftBoard() {
               >
                 <div className="px-4 py-3 border-b border-border bg-surface-2/40 flex items-center justify-between">
                   <div>
-                    <p className="font-bold text-text-primary text-sm">{mgr.fullName}</p>
+                    <p className="font-bold text-text-primary text-sm">
+                      {(() => {
+                        const key = rosters ? rosterKey(mgr.fullName, rosters) : null;
+                        return (key && teamNames[key]) ? teamNames[key] : mgr.fullName;
+                      })()}
+                    </p>
                     <p className="text-text-muted text-xs">{mgr.fullName}</p>
                   </div>
                   <span className="text-xs text-text-muted tabular-nums">
@@ -854,18 +1025,30 @@ export default function Home() {
           </>
         ) : (
           /* Graphs tab */
-          <div className="rounded-[14px] bg-surface border border-border p-6">
-            <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">
-              Cumulative Points — Season to Date
-            </h2>
-            {snapshots === null ? (
-              <div className="animate-pulse h-64 bg-surface-2/50 rounded-lg" />
-            ) : (
-              <AllTeamsChart snapshots={snapshots} rankings={rankings} />
-            )}
-            <p className="text-text-muted text-xs mt-4">
-              Daily snapshots taken at ~11:55 PM ET · Each point represents one day&apos;s fantasy scoring
-            </p>
+          <div className="space-y-6">
+            <div className="rounded-[14px] bg-surface border border-border p-6">
+              <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">
+                Cumulative Points — Season to Date
+              </h2>
+              {snapshots === null ? (
+                <div className="animate-pulse h-64 bg-surface-2/50 rounded-lg" />
+              ) : (
+                <AllTeamsChart snapshots={snapshots} rankings={rankings} />
+              )}
+              <p className="text-text-muted text-xs mt-4">
+                Daily snapshots taken at ~11:55 PM ET · Each point represents one day&apos;s fantasy scoring
+              </p>
+            </div>
+
+            <div className="rounded-[14px] bg-surface border border-border p-6">
+              <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-1">
+                Points For vs. Points Against
+              </h2>
+              <p className="text-text-muted text-xs mb-4">
+                Based on ESPN H&amp;H matchup scoring · Hover a photo for details
+              </p>
+              <PFPAScatter rankings={rankings} />
+            </div>
           </div>
         )}
       </div>

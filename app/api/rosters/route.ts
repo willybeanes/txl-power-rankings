@@ -36,9 +36,12 @@ export async function GET() {
   // AND player name -> 2026 season total fantasy points
   const rosters: Record<string, string[]> = {};
   const playerPoints: Record<string, number> = {};
+  const teamNames: Record<string, string> = {};
 
   for (const team of data.teams ?? []) {
     const manager = memberNames[team.primaryOwner] ?? team.abbrev;
+    const espnTeamName: string = team.name ?? team.abbrev;
+    teamNames[manager] = espnTeamName;
     const players: string[] = [];
 
     for (const entry of team.roster?.entries ?? []) {
@@ -66,5 +69,5 @@ export async function GET() {
     rosters[manager] = players;
   }
 
-  return NextResponse.json({ rosters, playerPoints });
+  return NextResponse.json({ rosters, playerPoints, teamNames });
 }

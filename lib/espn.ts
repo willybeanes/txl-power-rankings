@@ -66,6 +66,8 @@ interface ESPNTeam {
       losses: number;
       streakLength: number;
       streakType: string;
+      pointsFor?: number;
+      pointsAgainst?: number;
     };
   };
   valuesByStat: Record<string, number>;
@@ -90,38 +92,19 @@ interface ESPNResponse {
   members: ESPNMember[];
 }
 
-export async function fetchESPNData(): Promise<TeamRawStats[]> {
-  const leagueId = process.env.ESPN_LEAGUE_ID;
-  const espnS2 = process.env.ESPN_S2;
-  const swid = process.env.ESPN_SWID;
-
-  if (!leagueId || !espnS2 || !swid) {
-    throw new Error("Missing ESPN environment variables");
-  }
-
-  const url = `${ESPN_API_BASE}/${leagueId}?view=mTeam&view=mStandings`;
-  const res = await fetch(url, {
-    headers: {
-      Cookie: `espn_s2=${espnS2}; SWID=${swid}`,
-    },
-    next: { revalidate: 300 }, // cache for 5 minutes
-  });
-
-  if (!res.ok) {
-    throw new Error(`ESPN API error: ${res.status}`);
-  }
-
-  const data: ESPNResponse = await res.json();
-
-  // Build member ID -> name lookup from API response, fallback to hardcoded
+/**
+ * Convert a parsed ESPN API response (teams + members arrays) into TeamRawStats[].
+ * Shared by fetchESPNData and the backfill route.
+ */
+export function parseESPNResponse(data: ESPNResponse): TeamRawStats[] {
   const memberNames: Record<string, string> = { ...OWNER_NAMES };
-  for (const m of data.members) {
+  for (const m of data.members ?? []) {
     memberNames[m.id] = `${m.firstName} ${m.lastName}`;
   }
 
-  return data.teams.map((t) => {
-    const stats = t.valuesByStat;
-    const overall = t.record.overall;
+  return (data.teams ?? []).map((t) => {
+    const stats = t.valuesByStat ?? {};
+    const overall = t.record?.overall ?? { wins: 0, losses: 0, streakType: "", streakLength: 0 };
     const streakPrefix = overall.streakType === "WIN" ? "W" : overall.streakType === "LOSS" ? "L" : "";
     const streak = streakPrefix ? `${streakPrefix}${overall.streakLength}` : "-";
 
@@ -131,7 +114,7 @@ export async function fetchESPNData(): Promise<TeamRawStats[]> {
 
     const manager = memberNames[t.primaryOwner] || t.abbrev;
 
-    const raw: TeamRawStats = {
+    return {
       team: t.name,
       manager,
       R: stats["20"] ?? 0,
@@ -167,10 +150,35 @@ export async function fetchESPNData(): Promise<TeamRawStats[]> {
       MOVES: moves,
       matchupWins: overall.wins,
       matchupLosses: overall.losses,
-    };
-
-    return raw;
+      pointsFor: overall.pointsFor ?? 0,
+      pointsAgainst: overall.pointsAgainst ?? 0,
+    } satisfies TeamRawStats;
   });
+}
+
+export async function fetchESPNData(): Promise<TeamRawStats[]> {
+  const leagueId = process.env.ESPN_LEAGUE_ID;
+  const espnS2 = process.env.ESPN_S2;
+  const swid = process.env.ESPN_SWID;
+
+  if (!leagueId || !espnS2 || !swid) {
+    throw new Error("Missing ESPN environment variables");
+  }
+
+  const url = `${ESPN_API_BASE}/${leagueId}?view=mTeam&view=mStandings`;
+  const res = await fetch(url, {
+    headers: {
+      Cookie: `espn_s2=${espnS2}; SWID=${swid}`,
+    },
+    next: { revalidate: 300 }, // cache for 5 minutes
+  });
+
+  if (!res.ok) {
+    throw new Error(`ESPN API error: ${res.status}`);
+  }
+
+  const data: ESPNResponse = await res.json();
+  return parseESPNResponse(data);
 }
 
 export async function fetchSchedule(): Promise<ScheduleData> {

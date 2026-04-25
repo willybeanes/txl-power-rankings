@@ -34,6 +34,8 @@ export interface TeamRawStats {
   MOVES: number;
   matchupWins: number;
   matchupLosses: number;
+  pointsFor: number;
+  pointsAgainst: number;
 }
 
 export interface TeamScored {
@@ -52,6 +54,8 @@ export interface TeamScored {
   era: number;
   ops: number;
   playoffPct: number;
+  pointsFor: number;
+  pointsAgainst: number;
 }
 
 export interface ScheduleEntry {
@@ -226,6 +230,8 @@ export function scoreTeams(
       era: t.Outs > 0 ? (t.ER / (t.Outs / 3)) * 9 : 0,
       ops: obp + slg,
       playoffPct: 0,
+      pointsFor: t.pointsFor,
+      pointsAgainst: t.pointsAgainst,
     };
   });
   scored.sort((a, b) => b.totalScore - a.totalScore);
