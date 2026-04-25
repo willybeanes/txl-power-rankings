@@ -596,6 +596,14 @@ function DraftBoard() {
                     key={mgr.colOrder}
                     className="py-1.5 px-1 text-center font-semibold text-text-secondary border-l border-border/50 whitespace-nowrap"
                   >
+                    {getHeadshot(mgr.fullName) && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={getHeadshot(mgr.fullName)}
+                        alt={mgr.fullName}
+                        className="w-7 h-7 rounded-full object-cover border border-border mx-auto mb-0.5"
+                      />
+                    )}
                     <div className="text-[11px]">{mgr.short}</div>
                   </th>
                 ))}
@@ -910,7 +918,7 @@ export default function Home() {
                         : "bg-amber/3 border-amber/15"
                   }`}
                 >
-                  <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-start justify-between mb-3">
                     <span
                       className={`text-2xl font-bold ${
                         i === 0 ? "text-amber" : i === 1 ? "text-text-secondary" : "text-amber/60"
@@ -920,8 +928,20 @@ export default function Home() {
                     </span>
                     <StreakBadge streak={team.streak} />
                   </div>
-                  <h3 className="font-bold text-text-primary">{team.team}</h3>
-                  <p className="text-text-muted text-xs mb-3">{team.manager}</p>
+                  <div className="flex items-center gap-3 mb-2">
+                    {getHeadshot(team.manager) && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={getHeadshot(team.manager)}
+                        alt={team.manager}
+                        className="w-12 h-12 rounded-full object-cover border-2 border-border flex-shrink-0"
+                      />
+                    )}
+                    <div>
+                      <h3 className="font-bold text-text-primary leading-tight">{team.team}</h3>
+                      <p className="text-text-muted text-xs">{team.manager}</p>
+                    </div>
+                  </div>
                   <div className="flex justify-between items-end">
                     <div className="flex gap-4 text-xs text-text-secondary">
                       <span>H: {team.hittingScore.toLocaleString()}</span>
