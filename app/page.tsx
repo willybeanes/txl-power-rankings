@@ -6,7 +6,7 @@ import { DRAFT_PICKS, DRAFT_MANAGERS, type DraftPick } from "@/lib/draft";
 
 type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore" | "era" | "moves" | "ops" | "playoffPct";
 type SortDir = "asc" | "desc";
-type Tab = "standings" | "graphs" | "draft";
+type Tab = "standings" | "graphs" | "draft" | "props";
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   return (
@@ -407,6 +407,207 @@ function PFPAScatter({ rankings }: { rankings: TeamScored[] }) {
             );
           })}
       </svg>
+    </div>
+  );
+}
+
+// ─── Props Tab ───────────────────────────────────────────────────────────────
+
+interface PropTeam { team: string; manager: string; value: number }
+interface WeeklyScore { team: string; manager: string; week: number; points: number }
+interface BadLuckEntry {
+  team: string; manager: string; record: string;
+  pointsFor: number; pointsAgainst: number;
+  paRank: number; pfRank: number; wPctRank: number; badLuckScore: number;
+}
+interface PropsData {
+  n: number;
+  hrTop3: PropTeam[];
+  kTop3: PropTeam[];
+  weeklyTop3: WeeklyScore[];
+  badLuck: BadLuckEntry[];
+}
+
+function PropPodium({
+  top3,
+  statLabel,
+  format = (v: number) => v.toString(),
+}: {
+  top3: PropTeam[];
+  statLabel: string;
+  format?: (v: number) => string;
+}) {
+  const medals = ["🥇", "🥈", "🥉"];
+  return (
+    <div className="space-y-2">
+      {top3.map((t, i) => (
+        <div key={t.team} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${i === 0 ? "bg-amber/8 border border-amber/20" : "bg-surface-2/30"}`}>
+          <span className="text-lg w-6 text-center flex-shrink-0">{medals[i]}</span>
+          {getHeadshot(t.manager) && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={getHeadshot(t.manager)} alt={t.manager}
+              className="w-9 h-9 rounded-full object-cover border border-border flex-shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-text-primary truncate">{t.team}</p>
+            <p className="text-xs text-text-muted truncate">{t.manager}</p>
+          </div>
+          <span className="text-sm font-bold tabular-nums text-text-primary flex-shrink-0">
+            {format(t.value)}
+            <span className="text-xs font-normal text-text-muted ml-1">{statLabel}</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PropsTab() {
+  const [data, setData] = useState<PropsData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/props")
+      .then((r) => r.json())
+      .then((d) => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {[0,1,2,3].map((i) => (
+          <div key={i} className="animate-pulse rounded-[14px] bg-surface border border-border h-56" />
+        ))}
+      </div>
+    );
+  }
+
+  if (!data) return <p className="text-text-muted text-sm">Failed to load props data.</p>;
+
+  const badLuckWinner = data.badLuck[0];
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      {/* Home Run Kings */}
+      <div className="rounded-[14px] bg-surface border border-border p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-2xl">💣</span>
+          <div>
+            <h2 className="font-bold text-text-primary text-base">Home Run Kings</h2>
+            <p className="text-xs text-text-muted">Most HR by hitters — season total</p>
+          </div>
+        </div>
+        <PropPodium top3={data.hrTop3} statLabel="HR" />
+      </div>
+
+      {/* Strikeout Artists */}
+      <div className="rounded-[14px] bg-surface border border-border p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-2xl">🔥</span>
+          <div>
+            <h2 className="font-bold text-text-primary text-base">Strikeout Artists</h2>
+            <p className="text-xs text-text-muted">Most K by pitchers — season total</p>
+          </div>
+        </div>
+        <PropPodium top3={data.kTop3} statLabel="K" />
+      </div>
+
+      {/* Single-Week High Score */}
+      <div className="rounded-[14px] bg-surface border border-border p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-2xl">🚀</span>
+          <div>
+            <h2 className="font-bold text-text-primary text-base">Single-Week Record</h2>
+            <p className="text-xs text-text-muted">Highest score in a 7-day matchup week (excl. Week 1)</p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {data.weeklyTop3.map((w, i) => {
+            const medals = ["🥇", "🥈", "🥉"];
+            return (
+              <div key={`${w.team}-${w.week}`}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2 ${i === 0 ? "bg-amber/8 border border-amber/20" : "bg-surface-2/30"}`}>
+                <span className="text-lg w-6 text-center flex-shrink-0">{medals[i]}</span>
+                {getHeadshot(w.manager) && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={getHeadshot(w.manager)} alt={w.manager}
+                    className="w-9 h-9 rounded-full object-cover border border-border flex-shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-text-primary truncate">{w.team}</p>
+                  <p className="text-xs text-text-muted">Week {w.week} · {w.manager}</p>
+                </div>
+                <span className="text-sm font-bold tabular-nums text-text-primary flex-shrink-0">
+                  {w.points.toFixed(1)}
+                  <span className="text-xs font-normal text-text-muted ml-1">pts</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Bad Luck Trophy */}
+      <div className="rounded-[14px] bg-surface border border-border p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-2xl">🍀</span>
+          <div>
+            <h2 className="font-bold text-text-primary text-base">Bad Luck Trophy</h2>
+            <p className="text-xs text-text-muted">PA rank + PF rank − W% rank · lowest score wins</p>
+          </div>
+        </div>
+
+        {/* Winner callout */}
+        <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 bg-brand-red/5 border border-brand-red/20 mb-3 mt-3">
+          {getHeadshot(badLuckWinner.manager) && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={getHeadshot(badLuckWinner.manager)} alt={badLuckWinner.manager}
+              className="w-10 h-10 rounded-full object-cover border-2 border-brand-red/40 flex-shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-text-primary truncate">{badLuckWinner.team}</p>
+            <p className="text-xs text-text-muted">{badLuckWinner.manager} · {badLuckWinner.record}</p>
+          </div>
+          <div className="text-right flex-shrink-0">
+            <p className="text-lg font-bold text-brand-red tabular-nums">{badLuckWinner.badLuckScore}</p>
+            <p className="text-[10px] text-text-muted">score</p>
+          </div>
+        </div>
+
+        {/* Full table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-text-muted border-b border-border/50">
+                <th className="text-left py-1.5 pr-2 font-semibold">Team</th>
+                <th className="text-center py-1.5 px-1 font-semibold" title="Points Against rank (1=most PA)">PA Rk</th>
+                <th className="text-center py-1.5 px-1 font-semibold" title="Points For rank (1=most PF)">PF Rk</th>
+                <th className="text-center py-1.5 px-1 font-semibold" title="Win% rank (1=best record)">W% Rk</th>
+                <th className="text-right py-1.5 pl-1 font-semibold">Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.badLuck.map((t, i) => (
+                <tr key={t.team} className={`border-t border-border/30 ${i === 0 ? "bg-brand-red/5 font-semibold" : ""}`}>
+                  <td className="py-1.5 pr-2">
+                    <span className="text-text-primary">{t.team}</span>
+                    <span className="text-text-muted ml-1.5 font-normal">{t.record}</span>
+                  </td>
+                  <td className="text-center py-1.5 px-1 tabular-nums text-text-secondary">{t.paRank}</td>
+                  <td className="text-center py-1.5 px-1 tabular-nums text-text-secondary">{t.pfRank}</td>
+                  <td className="text-center py-1.5 px-1 tabular-nums text-text-secondary">{t.wPctRank}</td>
+                  <td className={`text-right py-1.5 pl-1 tabular-nums font-bold ${i === 0 ? "text-brand-red" : "text-text-primary"}`}>
+                    {t.badLuckScore}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
   );
 }
@@ -867,13 +1068,13 @@ export default function Home() {
     <main className="min-h-screen px-4 sm:px-6">
       {/* Sticky header + tabs */}
       <div className="sticky top-0 z-20 bg-[var(--bg)] border-b border-border">
-        <div className={`mx-auto ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"}`}>
+        <div className={`mx-auto ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"} transition-none`}>
           <div className="pt-6 pb-0">
             <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">TXL Power Rankings</h1>
             <p className="text-text-secondary mt-0.5 text-sm">2026 Season</p>
           </div>
           <div className="flex gap-6 mt-3">
-            {(["standings", "graphs", "draft"] as Tab[]).map((tab) => (
+            {(["standings", "graphs", "draft", "props"] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setTab(tab)}
@@ -891,7 +1092,17 @@ export default function Home() {
       </div>
 
       <div className={`mx-auto pt-6 pb-8 ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"}`}>
-        {activeTab === "draft" ? (
+        {activeTab === "props" ? (
+          <div>
+            <div className="mb-6">
+              <h2 className="text-base font-bold text-text-primary">Season Props</h2>
+              <p className="text-text-muted text-xs mt-0.5">
+                Live season-long awards · updates daily
+              </p>
+            </div>
+            <PropsTab />
+          </div>
+        ) : activeTab === "draft" ? (
           <div>
             <div className="mb-4">
               <h2 className="text-base font-bold text-text-primary">2026 Draft Board</h2>
