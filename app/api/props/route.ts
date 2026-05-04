@@ -91,7 +91,9 @@ export async function GET() {
 
   // Dense ranking helper: ties share the same rank, next distinct value increments by 1
   type ScoredTeam = typeof scored[0];
-  function denseRank(
+  // Competition ranking ("1224"): tied teams share the lowest rank in their group;
+  // the next group's rank skips past all tied positions (e.g. 1, 2, 2, 4, 4, 4, 7…)
+  function competitionRank(
     items: ScoredTeam[],
     getValue: (t: ScoredTeam) => number,
     descending = true
@@ -100,22 +102,24 @@ export async function GET() {
       descending ? getValue(b) - getValue(a) : getValue(a) - getValue(b)
     );
     const result: Record<string, number> = {};
-    let rank = 1;
-    let prevVal: number | null = null;
-    for (const t of sorted) {
-      const val = getValue(t);
-      if (prevVal !== null && val !== prevVal) rank++;
-      result[t.team] = rank;
-      prevVal = val;
+    let i = 0;
+    while (i < sorted.length) {
+      const val = getValue(sorted[i]);
+      let j = i;
+      // find end of tie group
+      while (j < sorted.length && getValue(sorted[j]) === val) j++;
+      // all items in [i, j) share rank (i + 1)
+      for (let k = i; k < j; k++) result[sorted[k].team] = i + 1;
+      i = j;
     }
     return result;
   }
 
   // Bad luck: PA_rank + PF_rank - W%_rank (lowest score = most bad luck)
   const n = scored.length;
-  const paRank = denseRank(scored, (t) => t.pointsAgainst);
-  const pfRank = denseRank(scored, (t) => t.pointsFor);
-  const wPctRank = denseRank(
+  const paRank = competitionRank(scored, (t) => t.pointsAgainst);
+  const pfRank = competitionRank(scored, (t) => t.pointsFor);
+  const wPctRank = competitionRank(
     scored,
     (t) => t.raw.matchupWins / Math.max(1, t.raw.matchupWins + t.raw.matchupLosses)
   );
