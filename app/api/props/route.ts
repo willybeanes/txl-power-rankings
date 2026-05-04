@@ -17,26 +17,30 @@ export async function GET() {
   const cookieHeader = `espn_s2=${espnS2}; SWID=${swid}`;
   const cacheOpts = { next: { revalidate: 300 } } as const;
 
-  const [raw, matchupRes] = await Promise.all([
+  const [raw, matchupRes, metaRes] = await Promise.all([
     fetchESPNData(),
     fetch(`${ESPN_API_BASE}/${leagueId}?view=mMatchup&view=mMatchupScore`, {
       headers: { Cookie: cookieHeader },
       ...cacheOpts,
     }),
+    fetch(`${ESPN_API_BASE}/${leagueId}?view=mTeam`, {
+      headers: { Cookie: cookieHeader },
+      ...cacheOpts,
+    }),
   ]);
 
-  if (!matchupRes.ok) {
-    return NextResponse.json({ error: "ESPN matchup fetch failed" }, { status: 502 });
+  if (!matchupRes.ok || !metaRes.ok) {
+    return NextResponse.json({ error: "ESPN fetch failed" }, { status: 502 });
   }
 
-  const matchupData = await matchupRes.json();
+  const [matchupData, metaData] = await Promise.all([matchupRes.json(), metaRes.json()]);
   const scored = scoreTeams(raw);
 
-  const currentMatchupPeriod: number = matchupData.status?.currentMatchupPeriod ?? 99;
+  const currentMatchupPeriod: number = metaData.status?.currentMatchupPeriod ?? 99;
 
-  // Build teamId -> team name
+  // Build teamId -> team name (from mTeam which always has this)
   const teamNameById: Record<number, string> = {};
-  for (const t of matchupData.teams ?? []) teamNameById[t.id] = t.name;
+  for (const t of metaData.teams ?? []) teamNameById[t.id] = t.name;
 
   // Build team name -> scored team
   const teamByName = new Map(scored.map((t) => [t.team, t]));
