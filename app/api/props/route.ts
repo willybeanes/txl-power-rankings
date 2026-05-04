@@ -89,23 +89,36 @@ export async function GET() {
   // Pitcher K leaders (season total)
   const kRanked = [...scored].sort((a, b) => b.raw.K_P - a.raw.K_P);
 
+  // Dense ranking helper: ties share the same rank, next distinct value increments by 1
+  type ScoredTeam = typeof scored[0];
+  function denseRank(
+    items: ScoredTeam[],
+    getValue: (t: ScoredTeam) => number,
+    descending = true
+  ): Record<string, number> {
+    const sorted = [...items].sort((a, b) =>
+      descending ? getValue(b) - getValue(a) : getValue(a) - getValue(b)
+    );
+    const result: Record<string, number> = {};
+    let rank = 1;
+    let prevVal: number | null = null;
+    for (const t of sorted) {
+      const val = getValue(t);
+      if (prevVal !== null && val !== prevVal) rank++;
+      result[t.team] = rank;
+      prevVal = val;
+    }
+    return result;
+  }
+
   // Bad luck: PA_rank + PF_rank - W%_rank (lowest score = most bad luck)
   const n = scored.length;
-  const paRank = [...scored]
-    .sort((a, b) => b.pointsAgainst - a.pointsAgainst)
-    .reduce<Record<string, number>>((acc, t, i) => { acc[t.team] = i + 1; return acc; }, {});
-
-  const pfRank = [...scored]
-    .sort((a, b) => b.pointsFor - a.pointsFor)
-    .reduce<Record<string, number>>((acc, t, i) => { acc[t.team] = i + 1; return acc; }, {});
-
-  const wPctRank = [...scored]
-    .sort((a, b) => {
-      const wa = a.raw.matchupWins / Math.max(1, a.raw.matchupWins + a.raw.matchupLosses);
-      const wb = b.raw.matchupWins / Math.max(1, b.raw.matchupWins + b.raw.matchupLosses);
-      return wb - wa; // rank 1 = best record
-    })
-    .reduce<Record<string, number>>((acc, t, i) => { acc[t.team] = i + 1; return acc; }, {});
+  const paRank = denseRank(scored, (t) => t.pointsAgainst);
+  const pfRank = denseRank(scored, (t) => t.pointsFor);
+  const wPctRank = denseRank(
+    scored,
+    (t) => t.raw.matchupWins / Math.max(1, t.raw.matchupWins + t.raw.matchupLosses)
+  );
 
   const badLuck = scored
     .map((t) => ({
