@@ -44,16 +44,22 @@ const CHART_COLORS = [
 function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rankings: TeamScored[] }) {
   const teamNames = rankings.map((t) => t.team);
   const managers = Object.fromEntries(rankings.map((t) => [t.team, t.manager]));
+  const liveByTeam = Object.fromEntries(rankings.map((t) => [t.team, t.totalScore]));
 
-  const cumData: Record<string, number[]> = useMemo(() => {
+  // Build data series: historical snapshots + live "now" point appended
+  const { labels, cumData } = useMemo(() => {
+    const snapshotLabels = snapshots.map((s) => s.snapshot_date.slice(5));
+    const allLabels = [...snapshotLabels, "Live"];
+
     const result: Record<string, number[]> = {};
     for (const name of teamNames) {
-      result[name] = snapshots.map((snap) => {
+      const historical = snapshots.map((snap) => {
         const t = snap.teams.find((s) => s.team === name);
         return t?.totalScore ?? 0;
       });
+      result[name] = [...historical, liveByTeam[name] ?? 0];
     }
-    return result;
+    return { labels: allLabels, cumData: result };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshots, rankings]);
 
@@ -76,7 +82,7 @@ function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rank
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
 
-  const n = snapshots.length;
+  const n = labels.length;
   const xPos = (i: number) => (n <= 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW);
   const yPos = (val: number) => padT + plotH - (val / maxY) * plotH;
 
@@ -125,8 +131,9 @@ function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rank
         })}
 
         {/* X-axis labels */}
-        {snapshots.map((snap, i) => {
+        {labels.map((label, i) => {
           if (i !== 0 && i !== n - 1 && i % labelEvery !== 0) return null;
+          const isLive = label === "Live";
           return (
             <text
               key={i}
@@ -134,19 +141,20 @@ function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rank
               y={H - padB + 14}
               textAnchor="middle"
               fontSize={8}
-              fill="#8892a4"
+              fill={isLive ? "#dc2f1f" : "#8892a4"}
+              fontWeight={isLive ? 700 : 400}
             >
-              {snap.snapshot_date.slice(5)}
+              {label}
             </text>
           );
         })}
 
-        {/* Legend */}
+        {/* Legend — shows live totals (matches Standings) */}
         {teamNames.map((name, ti) => {
           const lx = padL + plotW + 14;
           const ly = padT + ti * 26;
           const color = CHART_COLORS[ti % CHART_COLORS.length];
-          const lastVal = cumData[name]?.[n - 1] ?? 0;
+          const liveVal = liveByTeam[name] ?? 0;
           return (
             <g key={name}>
               <rect x={lx} y={ly + 2} width={14} height={3} rx={1.5} fill={color} />
@@ -154,7 +162,7 @@ function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rank
                 {managers[name] || name}
               </text>
               <text x={lx + 18} y={ly + 17} fontSize={8} fill="#8892a4">
-                {lastVal.toLocaleString()} pts
+                {liveVal.toLocaleString()} pts
               </text>
             </g>
           );
