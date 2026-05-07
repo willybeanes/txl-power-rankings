@@ -152,24 +152,27 @@ function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rank
           );
         })}
 
-        {/* Legend — shows points accumulated within the visible window */}
-        {teamNames.map((name, ti) => {
-          const lx = padL + plotW + 14;
-          const ly = padT + ti * 26;
-          const color = CHART_COLORS[ti % CHART_COLORS.length];
-          const windowVal = cumData[name]?.[n - 1] ?? 0;
-          return (
-            <g key={name}>
-              <rect x={lx} y={ly + 2} width={14} height={3} rx={1.5} fill={color} />
-              <text x={lx + 18} y={ly + 7} fontSize={9} fill="#374151" fontWeight={500}>
-                {managers[name] || name}
-              </text>
-              <text x={lx + 18} y={ly + 17} fontSize={8} fill="#8892a4">
-                {windowVal.toLocaleString()} pts
-              </text>
-            </g>
-          );
-        })}
+        {/* Legend — sorted by window point total, colour stays tied to line */}
+        {[...teamNames]
+          .sort((a, b) => (cumData[b]?.[n - 1] ?? 0) - (cumData[a]?.[n - 1] ?? 0))
+          .map((name, ti) => {
+            const originalIdx = teamNames.indexOf(name);
+            const lx = padL + plotW + 14;
+            const ly = padT + ti * 26;
+            const color = CHART_COLORS[originalIdx % CHART_COLORS.length];
+            const windowVal = cumData[name]?.[n - 1] ?? 0;
+            return (
+              <g key={name}>
+                <rect x={lx} y={ly + 2} width={14} height={3} rx={1.5} fill={color} />
+                <text x={lx + 18} y={ly + 7} fontSize={9} fill="#374151" fontWeight={500}>
+                  {managers[name] || name}
+                </text>
+                <text x={lx + 18} y={ly + 17} fontSize={8} fill="#8892a4">
+                  {windowVal.toLocaleString()} pts
+                </text>
+              </g>
+            );
+          })}
       </svg>
     </div>
   );
