@@ -973,6 +973,8 @@ export default function Home() {
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [snapshots, setSnapshots] = useState<SnapshotDay[] | null>(null);
+  const [chartFrom, setChartFrom] = useState<string>(""); // YYYY-MM-DD or ""
+  const [chartTo, setChartTo] = useState<string>("");     // YYYY-MM-DD or ""
   const [sortKey, setSortKey] = useState<SortKey>("rank");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [activeTab, setActiveTab] = useState<Tab>("standings");
@@ -1060,6 +1062,27 @@ export default function Home() {
       .then((data) => setSnapshots(data.snapshots ?? []))
       .catch(() => setSnapshots([]));
   }, []);
+
+  const filteredSnapshots = useMemo(() => {
+    if (!snapshots) return snapshots;
+    return snapshots.filter((s) => {
+      if (chartFrom && s.snapshot_date < chartFrom) return false;
+      if (chartTo && s.snapshot_date > chartTo) return false;
+      return true;
+    });
+  }, [snapshots, chartFrom, chartTo]);
+
+  const applyPreset = (days: number | null) => {
+    if (days === null) {
+      setChartFrom("");
+      setChartTo("");
+    } else {
+      const d = new Date();
+      d.setDate(d.getDate() - days);
+      setChartFrom(d.toISOString().split("T")[0]);
+      setChartTo("");
+    }
+  };
 
   if (error) {
     return (
@@ -1266,13 +1289,57 @@ export default function Home() {
           /* Graphs tab */
           <div className="space-y-6">
             <div className="rounded-[14px] bg-surface border border-border p-6">
-              <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">
-                Cumulative Points — Season to Date
-              </h2>
-              {snapshots === null ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">
+                  Cumulative Points — Season to Date
+                </h2>
+                {/* Date filter controls */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {([["All", null], ["30d", 30], ["14d", 14], ["7d", 7]] as [string, number | null][]).map(([label, days]) => {
+                    const active = days === null ? (!chartFrom && !chartTo) : (() => {
+                      if (!chartFrom || chartTo) return false;
+                      const d = new Date(); d.setDate(d.getDate() - (days as number));
+                      return chartFrom === d.toISOString().split("T")[0];
+                    })();
+                    return (
+                      <button
+                        key={label}
+                        onClick={() => applyPreset(days)}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                          active
+                            ? "bg-brand-red text-white"
+                            : "bg-surface-2 text-text-muted hover:text-text-primary"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                  <div className="flex items-center gap-1.5 ml-1">
+                    <input
+                      type="date"
+                      value={chartFrom}
+                      min="2026-03-25"
+                      max={chartTo || new Date().toISOString().split("T")[0]}
+                      onChange={(e) => setChartFrom(e.target.value)}
+                      className="bg-surface-2 border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-brand-red"
+                    />
+                    <span className="text-text-muted text-xs">–</span>
+                    <input
+                      type="date"
+                      value={chartTo}
+                      min={chartFrom || "2026-03-25"}
+                      max={new Date().toISOString().split("T")[0]}
+                      onChange={(e) => setChartTo(e.target.value)}
+                      className="bg-surface-2 border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-brand-red"
+                    />
+                  </div>
+                </div>
+              </div>
+              {filteredSnapshots === null ? (
                 <div className="animate-pulse h-64 bg-surface-2/50 rounded-lg" />
               ) : (
-                <AllTeamsChart snapshots={snapshots} rankings={rankings} />
+                <AllTeamsChart snapshots={filteredSnapshots} rankings={rankings} />
               )}
               <p className="text-text-muted text-xs mt-4">
                 Daily snapshots taken at ~11:55 PM ET · Each point represents one day&apos;s fantasy scoring
