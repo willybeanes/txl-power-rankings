@@ -46,7 +46,8 @@ function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rank
   const managers = Object.fromEntries(rankings.map((t) => [t.team, t.manager]));
   const liveByTeam = Object.fromEntries(rankings.map((t) => [t.team, t.totalScore]));
 
-  // Build data series: historical snapshots + live "now" point appended
+  // Build data series: historical snapshots + live "now" point, normalized to
+  // start at 0 so the chart shows points accumulated within the visible window.
   const { labels, cumData } = useMemo(() => {
     const snapshotLabels = snapshots.map((s) => s.snapshot_date.slice(5));
     const allLabels = [...snapshotLabels, "Live"];
@@ -57,7 +58,9 @@ function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rank
         const t = snap.teams.find((s) => s.team === name);
         return t?.totalScore ?? 0;
       });
-      result[name] = [...historical, liveByTeam[name] ?? 0];
+      const raw = [...historical, liveByTeam[name] ?? 0];
+      const baseline = raw[0] ?? 0;
+      result[name] = raw.map((v) => v - baseline);
     }
     return { labels: allLabels, cumData: result };
   // eslint-disable-next-line react-hooks/exhaustive-deps
