@@ -190,13 +190,14 @@ function TradeChart({ series }: { series: TradeSeriesPoint[] }) {
   }
 
   const W = 780;
-  const H = 260;
+  const H = 280;
   const padL = 52;
-  const padR = 24;
-  const padT = 16;
+  const padR = 110; // room for headshots
+  const padT = 24;
   const padB = 36;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
+  const R = 20; // headshot circle radius
 
   const n = series.length;
   const maxY = Math.max(...series.map((p) => Math.max(p.murakami, p.pasquantino)), 1);
@@ -219,9 +220,28 @@ function TradeChart({ series }: { series: TradeSeriesPoint[] }) {
   const mFinal = series[n - 1].murakami;
   const pFinal = series[n - 1].pasquantino;
 
+  // End-of-line x (right edge of plot) + gap before headshot
+  const endX = xPos(n - 1);
+  const mY = yPos(mFinal);
+  const pY = yPos(pFinal);
+  // Nudge circles apart if they overlap
+  const gap = Math.abs(mY - pY);
+  const mCY = gap < R * 2 + 4 ? Math.min(mY, pY) - 2 : mY;
+  const pCY = gap < R * 2 + 4 ? Math.max(mY, pY) + 2 : pY;
+  const hsX = endX + 8 + R; // centre-x of headshot circles
+
   return (
     <div className="overflow-x-auto">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 480 }}>
+        <defs>
+          <clipPath id="tc-clip-m">
+            <circle cx={hsX} cy={mCY} r={R} />
+          </clipPath>
+          <clipPath id="tc-clip-p">
+            <circle cx={hsX} cy={pCY} r={R} />
+          </clipPath>
+        </defs>
+
         {/* Y-axis grid */}
         {yTickVals.map((v) => (
           <g key={v}>
@@ -232,15 +252,32 @@ function TradeChart({ series }: { series: TradeSeriesPoint[] }) {
           </g>
         ))}
 
-        {/* Lines */}
-        <path d={mPath} fill="none" stroke="#3b82f6" strokeWidth={2.5} strokeLinejoin="round" />
-        <path d={pPath} fill="none" stroke="#f59e0b" strokeWidth={2.5} strokeLinejoin="round" />
+        {/* Lines — Murakami=black, Pasquantino=blue */}
+        <path d={mPath} fill="none" stroke="#111827" strokeWidth={2.5} strokeLinejoin="round" />
+        <path d={pPath} fill="none" stroke="#3b82f6" strokeWidth={2.5} strokeLinejoin="round" />
 
-        {/* End-of-line labels */}
-        <text x={xPos(n - 1) + 6} y={yPos(mFinal) + 4} fontSize={9} fill="#3b82f6" fontWeight={700}>
+        {/* Headshots at end of lines */}
+        <image
+          href="/headshots/Murakami.png"
+          x={hsX - R} y={mCY - R} width={R * 2} height={R * 2}
+          clipPath="url(#tc-clip-m)"
+          preserveAspectRatio="xMidYMid slice"
+        />
+        <circle cx={hsX} cy={mCY} r={R} fill="none" stroke="#111827" strokeWidth={1.5} />
+
+        <image
+          href="/headshots/Pasquantino.jpg"
+          x={hsX - R} y={pCY - R} width={R * 2} height={R * 2}
+          clipPath="url(#tc-clip-p)"
+          preserveAspectRatio="xMidYMid slice"
+        />
+        <circle cx={hsX} cy={pCY} r={R} fill="none" stroke="#3b82f6" strokeWidth={1.5} />
+
+        {/* Point totals to the right of headshots */}
+        <text x={hsX + R + 4} y={mCY + 4} fontSize={9} fill="#111827" fontWeight={700}>
           {mFinal.toLocaleString()}
         </text>
-        <text x={xPos(n - 1) + 6} y={yPos(pFinal) + 4} fontSize={9} fill="#f59e0b" fontWeight={700}>
+        <text x={hsX + R + 4} y={pCY + 4} fontSize={9} fill="#3b82f6" fontWeight={700}>
           {pFinal.toLocaleString()}
         </text>
 
@@ -258,12 +295,12 @@ function TradeChart({ series }: { series: TradeSeriesPoint[] }) {
       {/* Legend */}
       <div className="flex gap-6 mt-3 text-sm">
         <div className="flex items-center gap-2">
-          <span className="inline-block w-4 h-0.5 bg-blue-500 rounded" />
+          <span className="inline-block w-4 rounded" style={{ height: 2, backgroundColor: "#111827" }} />
           <span className="text-text-primary font-semibold">Munetaka Murakami</span>
           <span className="text-text-muted">{mFinal.toLocaleString()} pts</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="inline-block w-4 h-0.5 bg-amber-400 rounded" style={{ height: 2 }} />
+          <span className="inline-block w-4 rounded bg-blue-500" style={{ height: 2 }} />
           <span className="text-text-primary font-semibold">Vinnie Pasquantino</span>
           <span className="text-text-muted">{pFinal.toLocaleString()} pts</span>
         </div>
