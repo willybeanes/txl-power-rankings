@@ -152,12 +152,12 @@ function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rank
           );
         })}
 
-        {/* Legend — shows live totals (matches Standings) */}
+        {/* Legend — shows points accumulated within the visible window */}
         {teamNames.map((name, ti) => {
           const lx = padL + plotW + 14;
           const ly = padT + ti * 26;
           const color = CHART_COLORS[ti % CHART_COLORS.length];
-          const liveVal = liveByTeam[name] ?? 0;
+          const windowVal = cumData[name]?.[n - 1] ?? 0;
           return (
             <g key={name}>
               <rect x={lx} y={ly + 2} width={14} height={3} rx={1.5} fill={color} />
@@ -165,7 +165,7 @@ function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rank
                 {managers[name] || name}
               </text>
               <text x={lx + 18} y={ly + 17} fontSize={8} fill="#8892a4">
-                {liveVal.toLocaleString()} pts
+                {windowVal.toLocaleString()} pts
               </text>
             </g>
           );
