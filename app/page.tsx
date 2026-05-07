@@ -8,6 +8,8 @@ type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore"
 type SortDir = "asc" | "desc";
 type Tab = "standings" | "graphs" | "draft" | "props";
 
+type TradeSeriesPoint = { date: string; murakami: number; pasquantino: number };
+
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   return (
     <span className={`inline-block ml-1 ${active ? "text-text-primary" : "text-text-muted/40"}`}>
@@ -174,6 +176,98 @@ function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rank
             );
           })}
       </svg>
+    </div>
+  );
+}
+
+function TradeChart({ series }: { series: TradeSeriesPoint[] }) {
+  if (series.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-48 text-text-muted text-sm">
+        No data available
+      </div>
+    );
+  }
+
+  const W = 780;
+  const H = 260;
+  const padL = 52;
+  const padR = 24;
+  const padT = 16;
+  const padB = 36;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  const n = series.length;
+  const maxY = Math.max(...series.map((p) => Math.max(p.murakami, p.pasquantino)), 1);
+  const xPos = (i: number) => (n <= 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW);
+  const yPos = (v: number) => padT + plotH - (v / maxY) * plotH;
+
+  const yTicks = 4;
+  const yTickVals = Array.from({ length: yTicks + 1 }, (_, i) =>
+    Math.round((maxY / yTicks) * i)
+  );
+  const labelEvery = Math.ceil(n / 8);
+
+  const mPath = series
+    .map((p, i) => `${i === 0 ? "M" : "L"}${xPos(i).toFixed(1)},${yPos(p.murakami).toFixed(1)}`)
+    .join(" ");
+  const pPath = series
+    .map((p, i) => `${i === 0 ? "M" : "L"}${xPos(i).toFixed(1)},${yPos(p.pasquantino).toFixed(1)}`)
+    .join(" ");
+
+  const mFinal = series[n - 1].murakami;
+  const pFinal = series[n - 1].pasquantino;
+
+  return (
+    <div className="overflow-x-auto">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 480 }}>
+        {/* Y-axis grid */}
+        {yTickVals.map((v) => (
+          <g key={v}>
+            <line x1={padL} x2={padL + plotW} y1={yPos(v)} y2={yPos(v)} stroke="#e2e8f0" strokeWidth={0.6} />
+            <text x={padL - 6} y={yPos(v) + 3.5} textAnchor="end" fontSize={9} fill="#8892a4">
+              {v.toLocaleString()}
+            </text>
+          </g>
+        ))}
+
+        {/* Lines */}
+        <path d={mPath} fill="none" stroke="#3b82f6" strokeWidth={2.5} strokeLinejoin="round" />
+        <path d={pPath} fill="none" stroke="#f59e0b" strokeWidth={2.5} strokeLinejoin="round" />
+
+        {/* End-of-line labels */}
+        <text x={xPos(n - 1) + 6} y={yPos(mFinal) + 4} fontSize={9} fill="#3b82f6" fontWeight={700}>
+          {mFinal.toLocaleString()}
+        </text>
+        <text x={xPos(n - 1) + 6} y={yPos(pFinal) + 4} fontSize={9} fill="#f59e0b" fontWeight={700}>
+          {pFinal.toLocaleString()}
+        </text>
+
+        {/* X-axis labels */}
+        {series.map((p, i) => {
+          if (i !== 0 && i !== n - 1 && i % labelEvery !== 0) return null;
+          return (
+            <text key={i} x={xPos(i)} y={H - padB + 14} textAnchor="middle" fontSize={8} fill="#8892a4">
+              {p.date.slice(5)}
+            </text>
+          );
+        })}
+      </svg>
+
+      {/* Legend */}
+      <div className="flex gap-6 mt-3 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-4 h-0.5 bg-blue-500 rounded" />
+          <span className="text-text-primary font-semibold">Munetaka Murakami</span>
+          <span className="text-text-muted">{mFinal.toLocaleString()} pts</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-4 h-0.5 bg-amber-400 rounded" style={{ height: 2 }} />
+          <span className="text-text-primary font-semibold">Vinnie Pasquantino</span>
+          <span className="text-text-muted">{pFinal.toLocaleString()} pts</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -981,6 +1075,7 @@ export default function Home() {
   const [snapshots, setSnapshots] = useState<SnapshotDay[] | null>(null);
   const [chartFrom, setChartFrom] = useState<string>(""); // YYYY-MM-DD or ""
   const [chartTo, setChartTo] = useState<string>("");     // YYYY-MM-DD or ""
+  const [tradeChart, setTradeChart] = useState<TradeSeriesPoint[] | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("rank");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [activeTab, setActiveTab] = useState<Tab>("standings");
@@ -1067,6 +1162,11 @@ export default function Home() {
       .then((res) => res.json())
       .then((data) => setSnapshots(data.snapshots ?? []))
       .catch(() => setSnapshots([]));
+
+    fetch("/api/player-chart")
+      .then((res) => res.json())
+      .then((data) => setTradeChart(data.series ?? []))
+      .catch(() => setTradeChart([]));
   }, []);
 
   const filteredSnapshots = useMemo(() => {
@@ -1370,6 +1470,20 @@ export default function Home() {
                 Based on ESPN H&amp;H matchup scoring · Hover a photo for details
               </p>
               <PFPAScatter rankings={rankings} />
+            </div>
+
+            <div className="rounded-[14px] bg-surface border border-border p-6">
+              <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-1">
+                The Trade — Murakami vs. Pasquantino
+              </h2>
+              <p className="text-text-muted text-xs mb-4">
+                Cumulative TXL points since April 26th trade date
+              </p>
+              {tradeChart === null ? (
+                <div className="animate-pulse h-48 bg-surface-2/50 rounded-lg" />
+              ) : (
+                <TradeChart series={tradeChart} />
+              )}
             </div>
           </div>
         )}
