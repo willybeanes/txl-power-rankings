@@ -1297,7 +1297,17 @@ export default function Home() {
             <div className="rounded-[14px] bg-surface border border-border p-6">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                 <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">
-                  Cumulative Points — Season to Date
+                  {(() => {
+                    if (!chartFrom && !chartTo) return "Cumulative Points — Season to Date";
+                    if (chartFrom && !chartTo) {
+                      const days = Math.round((Date.now() - new Date(chartFrom).getTime()) / 86400000);
+                      if (days === 7) return "Cumulative Points — Last 7 Days";
+                      if (days === 14) return "Cumulative Points — Last 14 Days";
+                      if (days === 30) return "Cumulative Points — Last 30 Days";
+                      return `Cumulative Points — Since ${chartFrom.slice(5).replace("-", "/")}`;
+                    }
+                    return `Cumulative Points — ${chartFrom.slice(5).replace("-", "/")} to ${chartTo.slice(5).replace("-", "/")}`;
+                  })()}
                 </h2>
                 {/* Date filter controls */}
                 <div className="flex flex-wrap items-center gap-2">
