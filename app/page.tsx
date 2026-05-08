@@ -198,7 +198,7 @@ function TradeChart({ series }: { series: TradeSeriesPoint[] }) {
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
   const R = 22; // headshot circle radius
-  const MIN_SEP = R * 2 + 10; // minimum vertical gap between annotation centres
+  const MIN_GAP = R * 2 + 8; // minimum vertical gap between annotation centres
 
   const n = series.length;
   const maxY = Math.max(...series.map((p) => Math.max(p.murakami, p.pasquantino)), 1);
@@ -221,22 +221,42 @@ function TradeChart({ series }: { series: TradeSeriesPoint[] }) {
   const mFinal = series[n - 1].murakami;
   const pFinal = series[n - 1].pasquantino;
 
-  // Line endpoints (where leader lines originate)
+  // Line endpoints
   const endX = xPos(n - 1);
   const mEndY = yPos(mFinal);
   const pEndY = yPos(pFinal);
 
-  // Annotation circle centres — pushed apart if too close, clamped to chart
-  const annX = endX + 36 + R; // horizontal position of annotation centres
-  let mAnnY = mEndY;
-  let pAnnY = pEndY;
-  if (Math.abs(mAnnY - pAnnY) < MIN_SEP) {
-    const mid = (mAnnY + pAnnY) / 2;
-    mAnnY = mFinal >= pFinal ? mid - MIN_SEP / 2 : mid + MIN_SEP / 2;
-    pAnnY = mFinal >= pFinal ? mid + MIN_SEP / 2 : mid - MIN_SEP / 2;
+  // stackPositions: sort by ideal Y, sweep down to enforce MIN_GAP,
+  // then sweep back up if we overflowed the bottom bound, then clamp.
+  function stackPositions(idealYs: number[], topBound: number, bottomBound: number): number[] {
+    const order = Array.from({ length: idealYs.length }, (_, i) => i)
+      .sort((a, b) => idealYs[a] - idealYs[b]);
+    const cy = order.map(i => idealYs[i]);
+    // sweep down
+    for (let j = 1; j < cy.length; j++) {
+      if (cy[j] - cy[j - 1] < MIN_GAP) cy[j] = cy[j - 1] + MIN_GAP;
+    }
+    // sweep up if overflowed bottom
+    if (cy[cy.length - 1] > bottomBound) {
+      cy[cy.length - 1] = bottomBound;
+      for (let j = cy.length - 2; j >= 0; j--) {
+        if (cy[j + 1] - cy[j] < MIN_GAP) cy[j] = cy[j + 1] - MIN_GAP;
+      }
+    }
+    // clamp + restore original order
+    const result = new Array(idealYs.length);
+    order.forEach((orig, sorted) => {
+      result[orig] = Math.max(topBound, Math.min(bottomBound, cy[sorted]));
+    });
+    return result;
   }
-  mAnnY = Math.max(padT + R, Math.min(padT + plotH - R, mAnnY));
-  pAnnY = Math.max(padT + R, Math.min(padT + plotH - R, pAnnY));
+
+  const annX = endX + 28 + R;
+  const [mAnnY, pAnnY] = stackPositions(
+    [mEndY, pEndY],
+    padT + R + 2,
+    padT + plotH - R - 2
+  );
 
   return (
     <div className="overflow-x-auto">
