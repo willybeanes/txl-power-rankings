@@ -1528,7 +1528,7 @@ export default function Home() {
                 The Trade — Murakami vs. Pasquantino
               </h2>
               <p className="text-text-muted text-xs mb-4">
-                Cumulative TXL points since April 26th trade date
+                Cumulative points since April 26th
               </p>
               {tradeChart === null ? (
                 <div className="animate-pulse h-48 bg-surface-2/50 rounded-lg" />
