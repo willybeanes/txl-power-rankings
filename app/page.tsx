@@ -190,15 +190,15 @@ function TradeChart({ series }: { series: TradeSeriesPoint[] }) {
   }
 
   const W = 820;
-  const H = 300;
+  const H = 360; // taller chart = more room for separation
   const padL = 52;
-  const padR = 170; // annotation margin: leader + circle + label
-  const padT = 40;
+  const padR = 170;
+  const padT = 50;
   const padB = 36;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
-  const R = 22; // headshot circle radius
-  const MIN_GAP = R * 2 + 40; // minimum vertical gap between annotation centres
+  const R = 22;
+  const MIN_GAP = R * 2 + 50; // guaranteed space between circle centres
 
   const n = series.length;
   const maxY = Math.max(...series.map((p) => Math.max(p.murakami, p.pasquantino)), 1);
@@ -226,37 +226,21 @@ function TradeChart({ series }: { series: TradeSeriesPoint[] }) {
   const mEndY = yPos(mFinal);
   const pEndY = yPos(pFinal);
 
-  // stackPositions: sort by ideal Y, sweep down to enforce MIN_GAP,
-  // then sweep back up if we overflowed the bottom bound, then clamp.
-  function stackPositions(idealYs: number[], topBound: number, bottomBound: number): number[] {
-    const order = Array.from({ length: idealYs.length }, (_, i) => i)
-      .sort((a, b) => idealYs[a] - idealYs[b]);
-    const cy = order.map(i => idealYs[i]);
-    // sweep down
-    for (let j = 1; j < cy.length; j++) {
-      if (cy[j] - cy[j - 1] < MIN_GAP) cy[j] = cy[j - 1] + MIN_GAP;
-    }
-    // sweep up if overflowed bottom
-    if (cy[cy.length - 1] > bottomBound) {
-      cy[cy.length - 1] = bottomBound;
-      for (let j = cy.length - 2; j >= 0; j--) {
-        if (cy[j + 1] - cy[j] < MIN_GAP) cy[j] = cy[j + 1] - MIN_GAP;
-      }
-    }
-    // clamp + restore original order
-    const result = new Array(idealYs.length);
-    order.forEach((orig, sorted) => {
-      result[orig] = Math.max(topBound, Math.min(bottomBound, cy[sorted]));
-    });
-    return result;
-  }
+  // Symmetric spread: higher-value player floats UP, lower floats DOWN.
+  // If spread exceeds bounds, shift both together (gap is always preserved).
+  const topBound = padT + R + 4;
+  const botBound = padT + plotH - R - 4;
+  const mid = (mEndY + pEndY) / 2;
+  // higher score = smaller Y pixel = goes up (negative direction)
+  let mAnnY = mFinal >= pFinal ? mid - MIN_GAP / 2 : mid + MIN_GAP / 2;
+  let pAnnY = pFinal >= mFinal ? mid - MIN_GAP / 2 : mid + MIN_GAP / 2;
+  // shift both together if either overflows bounds (gap stays intact)
+  const over = topBound - Math.min(mAnnY, pAnnY);
+  if (over > 0) { mAnnY += over; pAnnY += over; }
+  const under = Math.max(mAnnY, pAnnY) - botBound;
+  if (under > 0) { mAnnY -= under; pAnnY -= under; }
 
   const annX = endX + 28 + R;
-  const [mAnnY, pAnnY] = stackPositions(
-    [mEndY, pEndY],
-    padT + R + 2,
-    padT + plotH - R - 2
-  );
 
   return (
     <div className="overflow-x-auto">
