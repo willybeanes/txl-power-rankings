@@ -198,7 +198,7 @@ function TradeChart({ series }: { series: TradeSeriesPoint[] }) {
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
   const R = 22; // headshot circle radius
-  const MIN_GAP = R * 2 + 8; // minimum vertical gap between annotation centres
+  const MIN_GAP = R * 2 + 40; // minimum vertical gap between annotation centres
 
   const n = series.length;
   const maxY = Math.max(...series.map((p) => Math.max(p.murakami, p.pasquantino)), 1);
