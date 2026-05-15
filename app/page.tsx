@@ -773,7 +773,6 @@ function PropsTab() {
           <span className="text-2xl">🪵</span>
           <div>
             <h2 className="font-bold text-text-primary text-base">Pinocchio Boy of the Month</h2>
-            <p className="text-xs text-text-muted">No one knows how it works</p>
           </div>
         </div>
         <img
