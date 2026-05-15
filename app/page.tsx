@@ -767,6 +767,22 @@ function PropsTab() {
         </div>
       </div>
 
+      {/* Pinocchio Boy of the Month */}
+      <div className="rounded-[14px] bg-surface border border-border p-5 flex flex-col items-center gap-4">
+        <div className="flex items-center gap-2 self-start">
+          <span className="text-2xl">🪵</span>
+          <div>
+            <h2 className="font-bold text-text-primary text-base">Pinocchio Boy of the Month</h2>
+            <p className="text-xs text-text-muted">No one knows how it works</p>
+          </div>
+        </div>
+        <img
+          src="/pinocchio.png"
+          alt="Pinocchio Boy of the Month"
+          className="w-full max-w-xs rounded-2xl object-cover"
+        />
+      </div>
+
     </div>
   );
 }
