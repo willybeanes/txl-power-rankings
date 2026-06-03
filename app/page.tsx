@@ -581,31 +581,33 @@ interface BadLuckEntry {
 }
 interface PropsData {
   n: number;
-  hrTop3: PropTeam[];
-  kTop3: PropTeam[];
-  weeklyTop3: WeeklyScore[];
+  hrAll: PropTeam[];
+  kAll: PropTeam[];
+  weeklyTop10: WeeklyScore[];
   badLuck: BadLuckEntry[];
 }
 
-function PropPodium({
-  top3,
+function PropRankedList({
+  teams,
   statLabel,
   format = (v: number) => v.toString(),
 }: {
-  top3: PropTeam[];
+  teams: PropTeam[];
   statLabel: string;
   format?: (v: number) => string;
 }) {
   const medals = ["🥇", "🥈", "🥉"];
   return (
-    <div className="space-y-2">
-      {top3.map((t, i) => (
+    <div className="space-y-1.5">
+      {teams.map((t, i) => (
         <div key={t.team} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${i === 0 ? "bg-amber/8 border border-amber/20" : "bg-surface-2/30"}`}>
-          <span className="text-lg w-6 text-center flex-shrink-0">{medals[i]}</span>
+          <span className={`w-6 text-center flex-shrink-0 ${i < 3 ? "text-lg" : "text-xs font-bold text-text-muted"}`}>
+            {i < 3 ? medals[i] : `#${i + 1}`}
+          </span>
           {getHeadshot(t.manager) && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={getHeadshot(t.manager)} alt={t.manager}
-              className="w-9 h-9 rounded-full object-cover border border-border flex-shrink-0" />
+              className="w-8 h-8 rounded-full object-cover border border-border flex-shrink-0" />
           )}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-text-primary truncate">{t.team}</p>
@@ -658,7 +660,7 @@ function PropsTab() {
             <p className="text-xs text-text-muted">Most HR by hitters — season total</p>
           </div>
         </div>
-        <PropPodium top3={data.hrTop3} statLabel="HR" />
+        <PropRankedList teams={data.hrAll} statLabel="HR" />
       </div>
 
       {/* Strikeout Artists */}
@@ -670,7 +672,7 @@ function PropsTab() {
             <p className="text-xs text-text-muted">Most K by pitchers — season total</p>
           </div>
         </div>
-        <PropPodium top3={data.kTop3} statLabel="K" />
+        <PropRankedList teams={data.kAll} statLabel="K" />
       </div>
 
       {/* Single-Week High Score */}
@@ -683,12 +685,14 @@ function PropsTab() {
           </div>
         </div>
         <div className="space-y-2">
-          {data.weeklyTop3.map((w, i) => {
+          {data.weeklyTop10.map((w, i) => {
             const medals = ["🥇", "🥈", "🥉"];
             return (
               <div key={`${w.team}-${w.week}`}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2 ${i === 0 ? "bg-amber/8 border border-amber/20" : "bg-surface-2/30"}`}>
-                <span className="text-lg w-6 text-center flex-shrink-0">{medals[i]}</span>
+                <span className={`w-6 text-center flex-shrink-0 ${i < 3 ? "text-lg" : "text-xs font-bold text-text-muted"}`}>
+                  {i < 3 ? medals[i] : `#${i + 1}`}
+                </span>
                 {getHeadshot(w.manager) && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={getHeadshot(w.manager)} alt={w.manager}

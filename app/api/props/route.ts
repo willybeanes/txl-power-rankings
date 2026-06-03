@@ -140,9 +140,9 @@ export async function GET() {
 
   return NextResponse.json({
     n,
-    hrTop3: hrRanked.slice(0, 3).map((t) => ({ team: t.team, manager: t.manager, value: t.raw.HR })),
-    kTop3: kRanked.slice(0, 3).map((t) => ({ team: t.team, manager: t.manager, value: t.raw.K_P })),
-    weeklyTop3,
+    hrAll: hrRanked.map((t) => ({ team: t.team, manager: t.manager, value: t.raw.HR })),
+    kAll: kRanked.map((t) => ({ team: t.team, manager: t.manager, value: t.raw.K_P })),
+    weeklyTop10: weeklyScores.slice(0, 10),
     badLuck,
   });
 }
