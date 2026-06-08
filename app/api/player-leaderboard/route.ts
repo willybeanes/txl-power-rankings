@@ -74,29 +74,22 @@ export async function GET() {
 
   const cookie = `espn_s2=${espnS2}; SWID=${swid}`;
 
-  const [res, draftRes] = await Promise.all([
-    fetch(`${ESPN_API_BASE}/${leagueId}?view=mRoster&view=mTeam`,
-      { headers: { Cookie: cookie }, next: { revalidate: 300 } }),
-    fetch(`${ESPN_API_BASE}/${leagueId}?view=mDraftDetail`,
-      { headers: { Cookie: cookie }, next: { revalidate: 86400 } }),
-  ]);
+  const res = await fetch(
+    `${ESPN_API_BASE}/${leagueId}?view=mRoster&view=mTeam`,
+    { headers: { Cookie: cookie }, next: { revalidate: 300 } }
+  );
   if (!res.ok) return NextResponse.json({ error: `ESPN error ${res.status}` }, { status: 502 });
 
   const data = await res.json();
 
-  // Build playerId → round map from ESPN draft detail
-  const draftRoundByPlayerId: Record<number, number> = {};
-  if (draftRes.ok) {
-    const draftData = await draftRes.json();
-    for (const pick of draftData.draftDetail?.picks ?? []) {
-      draftRoundByPlayerId[pick.playerId] = pick.roundId;
-    }
+  // Use the authoritative hardcoded draft list for both round and keeper
+  // (ESPN's draft data has wrong rounds for some players e.g. Yordan Alvarez)
+  const draftRoundByName: Record<string, number> = {};
+  const keeperNames = new Set<string>();
+  for (const pick of DRAFT_PICKS) {
+    draftRoundByName[pick.player] = pick.round;
+    if (pick.isKeeper) keeperNames.add(pick.player);
   }
-
-  // Build keeper set from the authoritative hardcoded draft list (ESPN's keeper flag is unreliable)
-  const keeperNames = new Set(
-    DRAFT_PICKS.filter((p) => p.isKeeper).map((p) => p.player)
-  );
 
   // Build member ID → manager name
   const memberNames: Record<string, string> = {};
@@ -153,7 +146,7 @@ export async function GET() {
         position: displayPosition,
         type,
         txlScore: Math.round(txlScore),
-        draftRound: draftRoundByPlayerId[player.id] ?? null,
+        draftRound: draftRoundByName[player.fullName] ?? null,
         keeper: keeperNames.has(player.fullName),
         acquisitionType,
       });
