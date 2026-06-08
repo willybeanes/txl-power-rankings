@@ -10,13 +10,15 @@ async function fetchTrackedAbPa(): Promise<Record<string, { ab: number; pa: numb
       .select("teams")
       .gte("snapshot_date", "2026-03-25");
 
+    // Key by manager (not team name) so renames don't orphan historical AB/PA data
     const result: Record<string, { ab: number; pa: number }> = {};
     if (data) {
       for (const row of data) {
-        for (const t of row.teams as { team: string; trackedAB?: number; trackedPA?: number }[]) {
-          if (!result[t.team]) result[t.team] = { ab: 0, pa: 0 };
-          result[t.team].ab += t.trackedAB || 0;
-          result[t.team].pa += t.trackedPA || 0;
+        for (const t of row.teams as { team: string; manager?: string; trackedAB?: number; trackedPA?: number }[]) {
+          const key = t.manager || t.team;
+          if (!result[key]) result[key] = { ab: 0, pa: 0 };
+          result[key].ab += t.trackedAB || 0;
+          result[key].pa += t.trackedPA || 0;
         }
       }
     }

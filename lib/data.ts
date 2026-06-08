@@ -209,7 +209,8 @@ export function scoreTeams(
     const hitting = calcHitting(t);
     const pitching = calcPitching(t);
     const h = t["1B"] + t["2B"] + t["3B"] + t.HR;
-    const abPa = trackedAbPa?.[t.team];
+    // Look up by manager (stable) — falls back to team name for legacy snapshots
+    const abPa = trackedAbPa?.[t.manager] ?? trackedAbPa?.[t.team];
     const ab = abPa?.ab ?? 0;
     const pa = abPa?.pa ?? 0;
     const obp = pa > 0 ? (h + t.BB + t.HBP) / pa : 0;
