@@ -58,6 +58,7 @@ export interface PlayerEntry {
   position: string;
   type: "hitter" | "pitcher";
   txlScore: number;
+  draftRound: number | null;  // null = undrafted (FA/waiver pickup)
 }
 
 export async function GET() {
@@ -70,13 +71,24 @@ export async function GET() {
 
   const cookie = `espn_s2=${espnS2}; SWID=${swid}`;
 
-  const res = await fetch(
-    `${ESPN_API_BASE}/${leagueId}?view=mRoster&view=mTeam`,
-    { headers: { Cookie: cookie }, next: { revalidate: 300 } }
-  );
+  const [res, draftRes] = await Promise.all([
+    fetch(`${ESPN_API_BASE}/${leagueId}?view=mRoster&view=mTeam`,
+      { headers: { Cookie: cookie }, next: { revalidate: 300 } }),
+    fetch(`${ESPN_API_BASE}/${leagueId}?view=mDraftDetail`,
+      { headers: { Cookie: cookie }, next: { revalidate: 86400 } }),
+  ]);
   if (!res.ok) return NextResponse.json({ error: `ESPN error ${res.status}` }, { status: 502 });
 
   const data = await res.json();
+
+  // Build playerId → draft round map
+  const draftRoundByPlayerId: Record<number, number> = {};
+  if (draftRes.ok) {
+    const draftData = await draftRes.json();
+    for (const pick of draftData.draftDetail?.picks ?? []) {
+      draftRoundByPlayerId[pick.playerId] = pick.roundId;
+    }
+  }
 
   // Build member ID → manager name
   const memberNames: Record<string, string> = {};
@@ -132,6 +144,7 @@ export async function GET() {
         position: displayPosition,
         type,
         txlScore: Math.round(txlScore),
+        draftRound: draftRoundByPlayerId[player.id] ?? null,
       });
     }
   }
