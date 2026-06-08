@@ -581,9 +581,12 @@ interface PlayerEntry {
   draftRound: number | null; keeper: boolean;
 }
 
+const POSITION_ORDER = ["SP", "RP", "2-WAY", "C", "1B", "2B", "3B", "SS", "OF", "DH"];
+
 function PlayersTab() {
   const [players, setPlayers] = useState<PlayerEntry[] | null>(null);
   const [filterManager, setFilterManager] = useState<string | null>(null);
+  const [filterPosition, setFilterPosition] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/player-leaderboard")
@@ -592,7 +595,7 @@ function PlayersTab() {
       .catch(() => { setPlayers([]); });
   }, []);
 
-  // Unique managers in standings order (derived from loaded data)
+  // Unique managers sorted alphabetically by team name
   const managers = useMemo(() => {
     if (!players) return [];
     const seen = new Set<string>();
@@ -602,17 +605,27 @@ function PlayersTab() {
       .sort((a, b) => a.team.localeCompare(b.team));
   }, [players]);
 
+  // Unique positions present in data, sorted by canonical order
+  const positions = useMemo(() => {
+    if (!players) return [];
+    const present = new Set(players.map((p) => p.position));
+    return POSITION_ORDER.filter((pos) => present.has(pos));
+  }, [players]);
+
   const visiblePlayers = useMemo(() => {
     if (!players) return players;
-    if (!filterManager) return players;
-    return players.filter((p) => p.manager === filterManager);
-  }, [players, filterManager]);
+    return players.filter((p) =>
+      (!filterManager || p.manager === filterManager) &&
+      (!filterPosition || p.position === filterPosition)
+    );
+  }, [players, filterManager, filterPosition]);
 
   return (
     <div className="space-y-3">
       {/* Team filter pills */}
       {players && players.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <span className="text-text-muted text-xs font-semibold w-10 shrink-0">Team</span>
           <button
             onClick={() => setFilterManager(null)}
             className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
@@ -639,6 +652,36 @@ function PlayersTab() {
                   className="w-4 h-4 rounded-full object-cover flex-shrink-0" />
               )}
               {team}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Position filter pills */}
+      {positions.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <span className="text-text-muted text-xs font-semibold w-10 shrink-0">Pos</span>
+          <button
+            onClick={() => setFilterPosition(null)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+              filterPosition === null
+                ? "bg-brand-red text-white"
+                : "bg-surface-2 text-text-muted hover:text-text-primary"
+            }`}
+          >
+            All
+          </button>
+          {positions.map((pos) => (
+            <button
+              key={pos}
+              onClick={() => setFilterPosition(filterPosition === pos ? null : pos)}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                filterPosition === pos
+                  ? "bg-brand-red text-white"
+                  : "bg-surface-2 text-text-muted hover:text-text-primary"
+              }`}
+            >
+              {pos}
             </button>
           ))}
         </div>
