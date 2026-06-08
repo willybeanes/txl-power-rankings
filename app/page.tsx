@@ -6,7 +6,7 @@ import { DRAFT_PICKS, DRAFT_MANAGERS, type DraftPick } from "@/lib/draft";
 
 type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore" | "era" | "moves" | "ops" | "playoffPct";
 type SortDir = "asc" | "desc";
-type Tab = "standings" | "graphs" | "draft" | "props";
+type Tab = "standings" | "graphs" | "draft" | "props" | "players";
 
 type TradeSeriesPoint = { date: string; murakami: number; pasquantino: number };
 
@@ -566,6 +566,96 @@ function PFPAScatter({ rankings }: { rankings: TeamScored[] }) {
             );
           })}
       </svg>
+    </div>
+  );
+}
+
+// ─── Players Tab ─────────────────────────────────────────────────────────────
+
+interface PlayerEntry {
+  name: string; team: string; manager: string;
+  position: string; type: "hitter" | "pitcher"; txlScore: number;
+}
+
+function PlayersTab() {
+  const [hitters, setHitters] = useState<PlayerEntry[] | null>(null);
+  const [pitchers, setPitchers] = useState<PlayerEntry[] | null>(null);
+  const [view, setView] = useState<"hitters" | "pitchers">("hitters");
+
+  useEffect(() => {
+    fetch("/api/player-leaderboard")
+      .then((r) => r.json())
+      .then((d) => { setHitters(d.hitters ?? []); setPitchers(d.pitchers ?? []); })
+      .catch(() => { setHitters([]); setPitchers([]); });
+  }, []);
+
+  const rows = view === "hitters" ? hitters : pitchers;
+
+  return (
+    <div className="space-y-4">
+      {/* Toggle */}
+      <div className="flex gap-2">
+        {(["hitters", "pitchers"] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors capitalize ${
+              view === v ? "bg-brand-red text-white" : "bg-surface-2 text-text-muted hover:text-text-primary"
+            }`}
+          >
+            {v}
+          </button>
+        ))}
+      </div>
+
+      <div className="rounded-[14px] bg-surface border border-border overflow-hidden">
+        {rows === null ? (
+          <div className="space-y-px p-2">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div key={i} className="h-12 bg-surface-2/50 rounded-lg animate-pulse" />
+            ))}
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="text-text-muted text-sm p-6">No data available.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-text-muted text-xs border-b border-border bg-surface-2/40">
+                <th className="text-left py-2.5 pl-4 pr-2 font-semibold w-8">#</th>
+                <th className="text-left py-2.5 px-2 font-semibold">Player</th>
+                <th className="text-left py-2.5 px-2 font-semibold hidden sm:table-cell">Pos</th>
+                <th className="text-left py-2.5 px-2 font-semibold">Team</th>
+                <th className="text-right py-2.5 px-4 font-semibold">TXL Pts</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((p, i) => (
+                <tr key={`${p.name}-${p.team}`}
+                  className={`border-t border-border/30 transition-colors hover:bg-surface-2/30 ${i === 0 ? "bg-amber/5" : ""}`}>
+                  <td className="py-2.5 pl-4 pr-2 tabular-nums text-text-muted text-xs font-semibold">
+                    {i < 3 ? ["🥇","🥈","🥉"][i] : i + 1}
+                  </td>
+                  <td className="py-2.5 px-2 font-semibold text-text-primary">{p.name}</td>
+                  <td className="py-2.5 px-2 text-text-muted text-xs hidden sm:table-cell">{p.position}</td>
+                  <td className="py-2.5 px-2">
+                    <div className="flex items-center gap-2">
+                      {getHeadshot(p.manager) && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={getHeadshot(p.manager)} alt={p.manager}
+                          className="w-6 h-6 rounded-full object-cover border border-border flex-shrink-0" />
+                      )}
+                      <span className="text-text-secondary text-xs truncate max-w-[120px]">{p.team}</span>
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-4 text-right tabular-nums font-bold text-text-primary">
+                    {p.txlScore.toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
@@ -1138,7 +1228,7 @@ export default function Home() {
   // Sync tab with URL (?tab=standings|graphs|draft)
   useEffect(() => {
     const param = new URLSearchParams(window.location.search).get("tab");
-    if (param === "standings" || param === "graphs" || param === "draft") {
+    if (param === "standings" || param === "graphs" || param === "draft" || param === "props" || param === "players") {
       setActiveTab(param);
     }
   }, []);
@@ -1266,7 +1356,7 @@ export default function Home() {
             <p className="text-text-secondary mt-0.5 text-sm">2026 Season</p>
           </div>
           <div className="flex gap-6 mt-3">
-            {(["standings", "graphs", "draft", "props"] as Tab[]).map((tab) => (
+            {(["standings", "graphs", "draft", "props", "players"] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setTab(tab)}
@@ -1284,7 +1374,17 @@ export default function Home() {
       </div>
 
       <div className={`mx-auto pt-6 pb-8 ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"}`}>
-        {activeTab === "props" ? (
+        {activeTab === "players" ? (
+          <div>
+            <div className="mb-6">
+              <h2 className="text-base font-bold text-text-primary">Player Leaderboard</h2>
+              <p className="text-text-muted text-xs mt-0.5">
+                Individual TXL points — season total
+              </p>
+            </div>
+            <PlayersTab />
+          </div>
+        ) : activeTab === "props" ? (
           <div>
             <div className="mb-6">
               <h2 className="text-base font-bold text-text-primary">Season Props</h2>
