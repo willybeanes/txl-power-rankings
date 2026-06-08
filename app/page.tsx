@@ -617,7 +617,11 @@ function PlayersTab() {
     if (!players) return players;
     return players.filter((p) =>
       (!filterManager || p.manager === filterManager) &&
-      (!filterPosition || p.position === filterPosition) &&
+      (!filterPosition || (
+        filterPosition === "Hitters" ? p.type === "hitter" :
+        filterPosition === "Pitchers" ? p.type === "pitcher" :
+        p.position === filterPosition
+      )) &&
       (!filterTag || (filterTag === "KEEPER" ? p.keeper : p.acquisitionType === filterTag))
     );
   }, [players, filterManager, filterPosition, filterTag]);
@@ -705,6 +709,20 @@ function PlayersTab() {
           >
             All
           </button>
+          {(["Hitters", "Pitchers"] as const).map((type) => (
+            <button
+              key={type}
+              onClick={() => setFilterPosition(filterPosition === type ? null : type)}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                filterPosition === type
+                  ? "bg-brand-red text-white"
+                  : "bg-surface-2 text-text-muted hover:text-text-primary"
+              }`}
+            >
+              {type}
+            </button>
+          ))}
+          <span className="text-border text-xs">·</span>
           {positions.map((pos) => (
             <button
               key={pos}
