@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { DRAFT_PICKS } from "@/lib/draft";
 
 const ESPN_API_BASE =
   "https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/seasons/2026/segments/0/leagues";
@@ -82,14 +83,19 @@ export async function GET() {
 
   const data = await res.json();
 
-  // Build playerId → { round, keeper } map
-  const draftInfoByPlayerId: Record<number, { round: number; keeper: boolean }> = {};
+  // Build playerId → round map from ESPN draft detail
+  const draftRoundByPlayerId: Record<number, number> = {};
   if (draftRes.ok) {
     const draftData = await draftRes.json();
     for (const pick of draftData.draftDetail?.picks ?? []) {
-      draftInfoByPlayerId[pick.playerId] = { round: pick.roundId, keeper: pick.keeper === true };
+      draftRoundByPlayerId[pick.playerId] = pick.roundId;
     }
   }
+
+  // Build keeper set from the authoritative hardcoded draft list (ESPN's keeper flag is unreliable)
+  const keeperNames = new Set(
+    DRAFT_PICKS.filter((p) => p.isKeeper).map((p) => p.player)
+  );
 
   // Build member ID → manager name
   const memberNames: Record<string, string> = {};
@@ -145,8 +151,8 @@ export async function GET() {
         position: displayPosition,
         type,
         txlScore: Math.round(txlScore),
-        draftRound: draftInfoByPlayerId[player.id]?.round ?? null,
-        keeper: draftInfoByPlayerId[player.id]?.keeper ?? false,
+        draftRound: draftRoundByPlayerId[player.id] ?? null,
+        keeper: keeperNames.has(player.fullName),
       });
     }
   }
