@@ -583,6 +583,7 @@ interface PlayerEntry {
 
 function PlayersTab() {
   const [players, setPlayers] = useState<PlayerEntry[] | null>(null);
+  const [filterManager, setFilterManager] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/player-leaderboard")
@@ -591,16 +592,66 @@ function PlayersTab() {
       .catch(() => { setPlayers([]); });
   }, []);
 
+  // Unique managers in standings order (derived from loaded data)
+  const managers = useMemo(() => {
+    if (!players) return [];
+    const seen = new Set<string>();
+    return players
+      .map((p) => ({ manager: p.manager, team: p.team }))
+      .filter(({ manager }) => seen.has(manager) ? false : (seen.add(manager), true))
+      .sort((a, b) => a.team.localeCompare(b.team));
+  }, [players]);
+
+  const visiblePlayers = useMemo(() => {
+    if (!players) return players;
+    if (!filterManager) return players;
+    return players.filter((p) => p.manager === filterManager);
+  }, [players, filterManager]);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      {/* Team filter pills */}
+      {players && players.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setFilterManager(null)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+              filterManager === null
+                ? "bg-brand-red text-white"
+                : "bg-surface-2 text-text-muted hover:text-text-primary"
+            }`}
+          >
+            All
+          </button>
+          {managers.map(({ manager, team }) => (
+            <button
+              key={manager}
+              onClick={() => setFilterManager(filterManager === manager ? null : manager)}
+              className={`flex items-center gap-1.5 pl-1.5 pr-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                filterManager === manager
+                  ? "bg-brand-red text-white"
+                  : "bg-surface-2 text-text-muted hover:text-text-primary"
+              }`}
+            >
+              {getHeadshot(manager) && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={getHeadshot(manager)} alt={manager}
+                  className="w-4 h-4 rounded-full object-cover flex-shrink-0" />
+              )}
+              {team}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="rounded-[14px] bg-surface border border-border overflow-hidden">
-        {players === null ? (
+        {visiblePlayers === null ? (
           <div className="space-y-px p-2">
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className="h-12 bg-surface-2/50 rounded-lg animate-pulse" />
             ))}
           </div>
-        ) : players.length === 0 ? (
+        ) : visiblePlayers.length === 0 ? (
           <p className="text-text-muted text-sm p-6">No data available.</p>
         ) : (
           <table className="w-full text-sm">
@@ -610,16 +661,18 @@ function PlayersTab() {
                 <th className="text-left py-2.5 px-2 font-semibold">Player</th>
                 <th className="text-left py-2.5 px-2 font-semibold hidden sm:table-cell">Pos</th>
                 <th className="text-left py-2.5 px-2 font-semibold hidden sm:table-cell">Rd</th>
-                <th className="text-left py-2.5 px-2 font-semibold">Team</th>
+                {!filterManager && <th className="text-left py-2.5 px-2 font-semibold">Team</th>}
                 <th className="text-right py-2.5 px-4 font-semibold">TXL Pts</th>
               </tr>
             </thead>
             <tbody>
-              {players.map((p, i) => (
+              {visiblePlayers.map((p) => {
+                const globalRank = players!.indexOf(p) + 1;
+                return (
                 <tr key={`${p.name}-${p.team}`}
                   className="border-t border-border/30 transition-colors hover:bg-surface-2/30">
                   <td className="py-2.5 pl-4 pr-2 tabular-nums text-text-muted text-xs font-semibold">
-                    {i + 1}
+                    {globalRank}
                   </td>
                   <td className="py-2.5 px-2 font-semibold text-text-primary">{p.name}</td>
                   <td className="py-2.5 px-2 text-text-muted text-xs hidden sm:table-cell">{p.position}</td>
@@ -635,21 +688,24 @@ function PlayersTab() {
                       )}
                     </div>
                   </td>
-                  <td className="py-2.5 px-2">
-                    <div className="flex items-center gap-2">
-                      {getHeadshot(p.manager) && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={getHeadshot(p.manager)} alt={p.manager}
-                          className="w-6 h-6 rounded-full object-cover border border-border flex-shrink-0" />
-                      )}
-                      <span className="text-text-secondary text-xs truncate max-w-[120px]">{p.team}</span>
-                    </div>
-                  </td>
+                  {!filterManager && (
+                    <td className="py-2.5 px-2">
+                      <div className="flex items-center gap-2">
+                        {getHeadshot(p.manager) && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={getHeadshot(p.manager)} alt={p.manager}
+                            className="w-6 h-6 rounded-full object-cover border border-border flex-shrink-0" />
+                        )}
+                        <span className="text-text-secondary text-xs truncate max-w-[120px]">{p.team}</span>
+                      </div>
+                    </td>
+                  )}
                   <td className="py-2.5 px-4 text-right tabular-nums font-bold text-text-primary">
                     {p.txlScore.toLocaleString()}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
