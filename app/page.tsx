@@ -35,7 +35,7 @@ function StreakBadge({ streak }: { streak: string }) {
 
 interface SnapshotDay {
   snapshot_date: string;
-  teams: { team: string; dailyPoints?: number; totalScore?: number }[];
+  teams: { team: string; manager?: string; dailyPoints?: number; totalScore?: number }[];
 }
 
 const CHART_COLORS = [
@@ -56,8 +56,11 @@ function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rank
 
     const result: Record<string, number[]> = {};
     for (const name of teamNames) {
+      const manager = managers[name];
       const historical = snapshots.map((snap) => {
-        const t = snap.teams.find((s) => s.team === name);
+        // Match by manager first (stable across renames), fall back to team name
+        const t = snap.teams.find((s) => s.manager === manager) ??
+                  snap.teams.find((s) => s.team === name);
         return t?.totalScore ?? 0;
       });
       const raw = [...historical, liveByTeam[name] ?? 0];
