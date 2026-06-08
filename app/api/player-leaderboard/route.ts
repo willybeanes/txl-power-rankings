@@ -59,6 +59,7 @@ export interface PlayerEntry {
   type: "hitter" | "pitcher";
   txlScore: number;
   draftRound: number | null;  // null = undrafted (FA/waiver pickup)
+  keeper: boolean;
 }
 
 export async function GET() {
@@ -81,12 +82,12 @@ export async function GET() {
 
   const data = await res.json();
 
-  // Build playerId → draft round map
-  const draftRoundByPlayerId: Record<number, number> = {};
+  // Build playerId → { round, keeper } map
+  const draftInfoByPlayerId: Record<number, { round: number; keeper: boolean }> = {};
   if (draftRes.ok) {
     const draftData = await draftRes.json();
     for (const pick of draftData.draftDetail?.picks ?? []) {
-      draftRoundByPlayerId[pick.playerId] = pick.roundId;
+      draftInfoByPlayerId[pick.playerId] = { round: pick.roundId, keeper: pick.keeper === true };
     }
   }
 
@@ -144,7 +145,8 @@ export async function GET() {
         position: displayPosition,
         type,
         txlScore: Math.round(txlScore),
-        draftRound: draftRoundByPlayerId[player.id] ?? null,
+        draftRound: draftInfoByPlayerId[player.id]?.round ?? null,
+        keeper: draftInfoByPlayerId[player.id]?.keeper ?? false,
       });
     }
   }
