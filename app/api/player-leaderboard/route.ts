@@ -110,32 +110,34 @@ export async function GET() {
       if (!seasonStat?.stats) continue;
 
       const stats: Record<string, number> = seasonStat.stats;
-      const txlScore = isPitcher
-        ? calcScore(stats, PITCHING_MULTS)
-        : calcScore(stats, HITTING_MULTS);
+
+      // Always compute both — stat IDs don't overlap, so two-way players
+      // (Ohtani etc.) get credit for both; single-way players are unaffected.
+      const hittingScore = calcScore(stats, HITTING_MULTS);
+      const pitchingScore = calcScore(stats, PITCHING_MULTS);
+      const txlScore = hittingScore + pitchingScore;
 
       // Skip players with zero contribution
       if (txlScore === 0) continue;
+
+      // Show "2-WAY" if the player has meaningful contributions on both sides
+      const isTwoWay = hittingScore > 50 && pitchingScore > 50;
+      const displayPosition = isTwoWay ? "2-WAY" : position;
+      const type = pitchingScore > hittingScore ? "pitcher" : "hitter";
 
       players.push({
         name: player.fullName,
         team: teamName,
         manager,
-        position,
-        type: isPitcher ? "pitcher" : "hitter",
+        position: displayPosition,
+        type,
         txlScore: Math.round(txlScore),
       });
     }
   }
 
-  // Sort by TXL score descending within each type
-  const hitters = players
-    .filter((p) => p.type === "hitter")
-    .sort((a, b) => b.txlScore - a.txlScore);
+  // Sort all players by TXL score descending
+  players.sort((a, b) => b.txlScore - a.txlScore);
 
-  const pitchers = players
-    .filter((p) => p.type === "pitcher")
-    .sort((a, b) => b.txlScore - a.txlScore);
-
-  return NextResponse.json({ hitters, pitchers });
+  return NextResponse.json({ players });
 }

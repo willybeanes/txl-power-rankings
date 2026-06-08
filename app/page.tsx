@@ -578,44 +578,25 @@ interface PlayerEntry {
 }
 
 function PlayersTab() {
-  const [hitters, setHitters] = useState<PlayerEntry[] | null>(null);
-  const [pitchers, setPitchers] = useState<PlayerEntry[] | null>(null);
-  const [view, setView] = useState<"hitters" | "pitchers">("hitters");
+  const [players, setPlayers] = useState<PlayerEntry[] | null>(null);
 
   useEffect(() => {
     fetch("/api/player-leaderboard")
       .then((r) => r.json())
-      .then((d) => { setHitters(d.hitters ?? []); setPitchers(d.pitchers ?? []); })
-      .catch(() => { setHitters([]); setPitchers([]); });
+      .then((d) => { setPlayers(d.players ?? []); })
+      .catch(() => { setPlayers([]); });
   }, []);
-
-  const rows = view === "hitters" ? hitters : pitchers;
 
   return (
     <div className="space-y-4">
-      {/* Toggle */}
-      <div className="flex gap-2">
-        {(["hitters", "pitchers"] as const).map((v) => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors capitalize ${
-              view === v ? "bg-brand-red text-white" : "bg-surface-2 text-text-muted hover:text-text-primary"
-            }`}
-          >
-            {v}
-          </button>
-        ))}
-      </div>
-
       <div className="rounded-[14px] bg-surface border border-border overflow-hidden">
-        {rows === null ? (
+        {players === null ? (
           <div className="space-y-px p-2">
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className="h-12 bg-surface-2/50 rounded-lg animate-pulse" />
             ))}
           </div>
-        ) : rows.length === 0 ? (
+        ) : players.length === 0 ? (
           <p className="text-text-muted text-sm p-6">No data available.</p>
         ) : (
           <table className="w-full text-sm">
@@ -629,11 +610,11 @@ function PlayersTab() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((p, i) => (
+              {players.map((p, i) => (
                 <tr key={`${p.name}-${p.team}`}
-                  className={`border-t border-border/30 transition-colors hover:bg-surface-2/30 ${i === 0 ? "bg-amber/5" : ""}`}>
+                  className="border-t border-border/30 transition-colors hover:bg-surface-2/30">
                   <td className="py-2.5 pl-4 pr-2 tabular-nums text-text-muted text-xs font-semibold">
-                    {i < 3 ? ["🥇","🥈","🥉"][i] : i + 1}
+                    {i + 1}
                   </td>
                   <td className="py-2.5 px-2 font-semibold text-text-primary">{p.name}</td>
                   <td className="py-2.5 px-2 text-text-muted text-xs hidden sm:table-cell">{p.position}</td>
