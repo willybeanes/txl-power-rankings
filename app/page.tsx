@@ -587,6 +587,7 @@ function PlayersTab() {
   const [players, setPlayers] = useState<PlayerEntry[] | null>(null);
   const [filterManager, setFilterManager] = useState<string | null>(null);
   const [filterPosition, setFilterPosition] = useState<string | null>(null);
+  const [filterTag, setFilterTag] = useState<"KEEPER" | "TRADE" | "ADD" | null>(null);
 
   useEffect(() => {
     fetch("/api/player-leaderboard")
@@ -616,9 +617,10 @@ function PlayersTab() {
     if (!players) return players;
     return players.filter((p) =>
       (!filterManager || p.manager === filterManager) &&
-      (!filterPosition || p.position === filterPosition)
+      (!filterPosition || p.position === filterPosition) &&
+      (!filterTag || (filterTag === "KEEPER" ? p.keeper : p.acquisitionType === filterTag))
     );
-  }, [players, filterManager, filterPosition]);
+  }, [players, filterManager, filterPosition, filterTag]);
 
   return (
     <div className="space-y-3">
@@ -654,6 +656,38 @@ function PlayersTab() {
               {team}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Tag filter pills */}
+      {players && players.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <span className="text-text-muted text-xs font-semibold w-10 shrink-0">Tag</span>
+          <button
+            onClick={() => setFilterTag(null)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+              filterTag === null ? "bg-brand-red text-white" : "bg-surface-2 text-text-muted hover:text-text-primary"
+            }`}
+          >
+            All
+          </button>
+          {(["KEEPER", "TRADE", "ADD"] as const).map((tag) => {
+            const active = filterTag === tag;
+            const style =
+              tag === "KEEPER" ? (active ? "bg-amber-500 text-white" : "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25") :
+              tag === "TRADE"  ? (active ? "bg-blue-500 text-white"  : "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25")   :
+                                 (active ? "bg-surface-2 text-text-primary border border-border" : "bg-surface-2 text-text-muted hover:text-text-primary");
+            const label = tag === "ADD" ? "FA" : tag;
+            return (
+              <button
+                key={tag}
+                onClick={() => setFilterTag(active ? null : tag)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${style}`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       )}
 
