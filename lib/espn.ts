@@ -38,19 +38,20 @@ const PITCHING_STAT_MAP: Record<string, keyof TeamRawStats> = {
   "60": "HD",
 };
 
-// ESPN member ID -> manager display name
-const OWNER_NAMES: Record<string, string> = {
+// ESPN member ID -> manager display name (canonical names matching DRAFT_PICKS)
+export const OWNER_NAMES: Record<string, string> = {
   "{0417CF3C-8AF1-40C3-92E5-0E6FD2B493F5}": "Charley Tauer",
   "{13B3CBFC-C1F8-44D7-84E7-EC900E9F4528}": "Mike Porter",
   "{76464928-80D5-4B80-AE27-74EDFB7AB662}": "Will Harris",
-  "{A19FD63E-E2B7-4D41-B1BB-DBFBA59F8B3A}": "Kevin Katsuda",
-  "{E18CBE56-AAB9-4DD7-8C50-FA1A63476BCC}": "Patrick Harvey",
-  "{24F2A7B2-10EF-4F23-A5A5-C7E6BD3F0C6B}": "Stephan Mattke",
-  "{C31AFCB3-DA5A-4AE1-BE52-C2E61F8BCE34}": "Mike Kyne",
-  "{6CF476C6-4F45-4FC9-B9C3-C14D78CFBC78}": "Austin Brennen",
-  "{36FD9B7C-E96F-4F2F-AF20-95C5C9A55BD5}": "Andrew Bergoine",
-  "{C879FF95-A9FF-43B3-96B5-DB35FDC4C56F}": "Artie Arredondo",
-  "{3B56FC65-50D2-4B2C-BF3E-D31218C0DEC1}": "Darren Cook",
+  "{2A241A3D-5A41-45D5-92D8-D8EE0B9CEDEC}": "Patrick Harvey",
+  "{4C605B04-E018-4656-A05B-04E0181656D8}": "Josh Brooks",
+  "{24C8E096-4CFD-4307-88E0-964CFD0307EE}": "Stephan Mattke",
+  "{9E099A7C-57B3-45AA-80DB-336B4414A7EF}": "Mike Kyne",
+  "{6A60FD67-F27A-4783-88B5-58BC500862BF}": "Austin Brennen",
+  "{B43826C7-7812-4A45-889A-41757347E792}": "Andrew Bergoine",
+  "{B2D3C5B3-052A-4539-8530-520974A0AC43}": "Artie Arredondo",
+  "{89E53238-E581-40C0-85E5-68B5937136EB}": "Darren Cook",
+  "{96F39564-A0FB-41BA-B395-64A0FBA1BABA}": "Kevin Katsuda",
 };
 
 interface ESPNTeam {

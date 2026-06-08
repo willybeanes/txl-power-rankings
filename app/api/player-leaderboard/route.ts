@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { DRAFT_PICKS } from "@/lib/draft";
+import { OWNER_NAMES } from "@/lib/espn";
 
 const ESPN_API_BASE =
   "https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/seasons/2026/segments/0/leagues";
@@ -82,19 +83,21 @@ export async function GET() {
 
   const data = await res.json();
 
-  // Use the authoritative hardcoded draft list for both round and keeper
-  // (ESPN's draft data has wrong rounds for some players e.g. Yordan Alvarez)
+  // Use the authoritative hardcoded draft list for round, keeper, and original manager
+  // (ESPN's acquisitionType is unreliable — e.g. Yordan Alvarez shows as TRADE when he wasn't)
   const draftRoundByName: Record<string, number> = {};
   const keeperNames = new Set<string>();
+  const draftManagerByName: Record<string, string> = {};
   for (const pick of DRAFT_PICKS) {
     draftRoundByName[pick.player] = pick.round;
+    draftManagerByName[pick.player] = pick.manager;
     if (pick.isKeeper) keeperNames.add(pick.player);
   }
 
-  // Build member ID → manager name
-  const memberNames: Record<string, string> = {};
+  // Build member ID → manager name (OWNER_NAMES takes priority for canonical casing)
+  const memberNames: Record<string, string> = { ...OWNER_NAMES };
   for (const m of data.members ?? []) {
-    memberNames[m.id] = `${m.firstName} ${m.lastName}`.trim();
+    if (!memberNames[m.id]) memberNames[m.id] = `${m.firstName} ${m.lastName}`.trim();
   }
 
   const players: PlayerEntry[] = [];
@@ -106,7 +109,14 @@ export async function GET() {
     for (const entry of team.roster?.entries ?? []) {
       const player = entry.playerPoolEntry?.player;
       if (!player) continue;
-      const acquisitionType: "DRAFT" | "ADD" | "TRADE" = entry.acquisitionType ?? "DRAFT";
+      // Derive acquisition type from DRAFT_PICKS rather than ESPN's unreliable flag:
+      // - in DRAFT_PICKS + same manager who drafted = DRAFT
+      // - in DRAFT_PICKS + different manager = TRADE (genuinely traded)
+      // - not in DRAFT_PICKS = use ESPN's value (ADD or TRADE)
+      const draftedBy = draftManagerByName[player.fullName];
+      const acquisitionType: "DRAFT" | "ADD" | "TRADE" = draftedBy
+        ? (draftedBy === manager ? "DRAFT" : "TRADE")
+        : (entry.acquisitionType === "TRADE" ? "TRADE" : "ADD");
 
       const positionId: number = player.defaultPositionId ?? 0;
       const isPitcher = PITCHER_POSITION_IDS.has(positionId);
