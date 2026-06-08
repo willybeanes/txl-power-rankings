@@ -578,7 +578,7 @@ function PFPAScatter({ rankings }: { rankings: TeamScored[] }) {
 interface PlayerEntry {
   name: string; team: string; manager: string;
   position: string; type: "hitter" | "pitcher"; txlScore: number;
-  draftRound: number | null; keeper: boolean;
+  draftRound: number | null; keeper: boolean; acquisitionType: "DRAFT" | "ADD" | "TRADE";
 }
 
 const POSITION_ORDER = ["SP", "RP", "2-WAY", "C", "1B", "2B", "3B", "SS", "OF", "DH"];
@@ -722,11 +722,21 @@ function PlayersTab() {
                   <td className="py-2.5 px-2 text-xs hidden sm:table-cell">
                     <div className="flex items-center gap-1.5">
                       <span className="text-text-muted">
-                        {p.draftRound != null ? `Rd ${p.draftRound}` : <span className="text-text-muted/50">FA</span>}
+                        {p.draftRound != null ? `Rd ${p.draftRound}` : <span className="text-text-muted/50">—</span>}
                       </span>
                       {p.keeper && (
                         <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-400 leading-none">
                           KEEPER
+                        </span>
+                      )}
+                      {p.acquisitionType === "TRADE" && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-500/15 text-blue-400 leading-none">
+                          TRADE
+                        </span>
+                      )}
+                      {p.acquisitionType === "ADD" && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-surface-2 text-text-muted leading-none">
+                          FA
                         </span>
                       )}
                     </div>

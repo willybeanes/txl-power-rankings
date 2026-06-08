@@ -61,6 +61,7 @@ export interface PlayerEntry {
   txlScore: number;
   draftRound: number | null;  // null = undrafted (FA/waiver pickup)
   keeper: boolean;
+  acquisitionType: "DRAFT" | "ADD" | "TRADE";
 }
 
 export async function GET() {
@@ -112,6 +113,7 @@ export async function GET() {
     for (const entry of team.roster?.entries ?? []) {
       const player = entry.playerPoolEntry?.player;
       if (!player) continue;
+      const acquisitionType: "DRAFT" | "ADD" | "TRADE" = entry.acquisitionType ?? "DRAFT";
 
       const positionId: number = player.defaultPositionId ?? 0;
       const isPitcher = PITCHER_POSITION_IDS.has(positionId);
@@ -153,6 +155,7 @@ export async function GET() {
         txlScore: Math.round(txlScore),
         draftRound: draftRoundByPlayerId[player.id] ?? null,
         keeper: keeperNames.has(player.fullName),
+        acquisitionType,
       });
     }
   }
