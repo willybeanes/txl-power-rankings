@@ -109,14 +109,16 @@ export async function GET() {
     for (const entry of team.roster?.entries ?? []) {
       const player = entry.playerPoolEntry?.player;
       if (!player) continue;
-      // Derive acquisition type from DRAFT_PICKS rather than ESPN's unreliable flag:
-      // - in DRAFT_PICKS + same manager who drafted = DRAFT
-      // - in DRAFT_PICKS + different manager = TRADE (genuinely traded)
-      // - not in DRAFT_PICKS = use ESPN's value (ADD or TRADE)
+      // Derive acquisition type:
+      // - in DRAFT_PICKS + still with original drafter = DRAFT
+      // - otherwise trust ESPN's acquisitionType (ADD = waiver/FA, TRADE = traded)
       const draftedBy = draftManagerByName[player.fullName];
-      const acquisitionType: "DRAFT" | "ADD" | "TRADE" = draftedBy
-        ? (draftedBy === manager ? "DRAFT" : "TRADE")
-        : (entry.acquisitionType === "TRADE" ? "TRADE" : "ADD");
+      const acquisitionType: "DRAFT" | "ADD" | "TRADE" =
+        draftedBy && draftedBy === manager
+          ? "DRAFT"
+          : entry.acquisitionType === "TRADE"
+          ? "TRADE"
+          : "ADD";
 
       const positionId: number = player.defaultPositionId ?? 0;
       const isPitcher = PITCHER_POSITION_IDS.has(positionId);
