@@ -587,13 +587,14 @@ function PlayersTab() {
   const [players, setPlayers] = useState<PlayerEntry[] | null>(null);
   const [filterManager, setFilterManager] = useState<string | null>(null);
   const [filterPosition, setFilterPosition] = useState<string | null>(null);
-  const [excludedTags, setExcludedTags] = useState<Set<"KEEPER" | "TRADE" | "ADD">>(new Set());
+  const [tagFilters, setTagFilters] = useState<Partial<Record<"KEEPER" | "TRADE" | "ADD", "include" | "exclude">>>({});
 
-  function toggleExcludeTag(tag: "KEEPER" | "TRADE" | "ADD") {
-    setExcludedTags((prev) => {
-      const next = new Set(prev);
-      if (next.has(tag)) next.delete(tag); else next.add(tag);
-      return next;
+  function cycleTag(tag: "KEEPER" | "TRADE" | "ADD") {
+    setTagFilters((prev) => {
+      const cur = prev[tag];
+      if (!cur) return { ...prev, [tag]: "include" };
+      if (cur === "include") return { ...prev, [tag]: "exclude" };
+      const next = { ...prev }; delete next[tag]; return next;
     });
   }
 
@@ -630,11 +631,16 @@ function PlayersTab() {
         filterPosition === "Pitchers" ? p.type === "pitcher" :
         p.position === filterPosition
       )) &&
-      !(excludedTags.has("KEEPER") && p.keeper) &&
-      !(excludedTags.has("TRADE") && p.acquisitionType === "TRADE") &&
-      !(excludedTags.has("ADD") && p.acquisitionType === "ADD")
+      (() => {
+        const includes = (Object.entries(tagFilters) as ["KEEPER"|"TRADE"|"ADD", "include"|"exclude"][]).filter(([,v]) => v === "include");
+        const excludes = (Object.entries(tagFilters) as ["KEEPER"|"TRADE"|"ADD", "include"|"exclude"][]).filter(([,v]) => v === "exclude");
+        const matchTag = (tag: "KEEPER"|"TRADE"|"ADD") => tag === "KEEPER" ? p.keeper : p.acquisitionType === tag;
+        if (includes.length > 0 && !includes.some(([t]) => matchTag(t))) return false;
+        if (excludes.some(([t]) => matchTag(t))) return false;
+        return true;
+      })()
     );
-  }, [players, filterManager, filterPosition, excludedTags]);
+  }, [players, filterManager, filterPosition, tagFilters]);
 
   return (
     <div className="space-y-3">
@@ -678,24 +684,32 @@ function PlayersTab() {
         <div className="flex flex-wrap gap-1.5 items-center">
           <span className="text-text-muted text-xs font-semibold w-10 shrink-0">Tag</span>
           <button
-            onClick={() => setExcludedTags(new Set())}
+            onClick={() => setTagFilters({})}
             className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-              excludedTags.size === 0 ? "bg-brand-red text-white" : "bg-surface-2 text-text-muted hover:text-text-primary"
+              Object.keys(tagFilters).length === 0 ? "bg-brand-red text-white" : "bg-surface-2 text-text-muted hover:text-text-primary"
             }`}
           >
             All
           </button>
           {(["KEEPER", "TRADE", "ADD"] as const).map((tag) => {
-            const excluded = excludedTags.has(tag);
-            const style =
-              tag === "KEEPER" ? (excluded ? "bg-amber-500/10 text-amber-400/40 line-through" : "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25") :
-              tag === "TRADE"  ? (excluded ? "bg-blue-500/10 text-blue-400/40 line-through"   : "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25")   :
-                                 (excluded ? "bg-surface-2 text-text-muted/40 line-through"   : "bg-surface-2 text-text-muted hover:text-text-primary");
+            const state = tagFilters[tag];
             const label = tag === "ADD" ? "FA" : tag;
+            const style =
+              tag === "KEEPER"
+                ? state === "include" ? "bg-amber-500 text-white"
+                : state === "exclude" ? "bg-amber-500/10 text-amber-400/40 line-through"
+                : "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25"
+              : tag === "TRADE"
+                ? state === "include" ? "bg-blue-500 text-white"
+                : state === "exclude" ? "bg-blue-500/10 text-blue-400/40 line-through"
+                : "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25"
+                : state === "include" ? "bg-surface-2 text-text-primary border border-border"
+                : state === "exclude" ? "bg-surface-2 text-text-muted/40 line-through"
+                : "bg-surface-2 text-text-muted hover:text-text-primary";
             return (
               <button
                 key={tag}
-                onClick={() => toggleExcludeTag(tag)}
+                onClick={() => cycleTag(tag)}
                 className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${style}`}
               >
                 {label}
