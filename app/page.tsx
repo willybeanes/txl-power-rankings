@@ -587,7 +587,15 @@ function PlayersTab() {
   const [players, setPlayers] = useState<PlayerEntry[] | null>(null);
   const [filterManager, setFilterManager] = useState<string | null>(null);
   const [filterPosition, setFilterPosition] = useState<string | null>(null);
-  const [filterTag, setFilterTag] = useState<"KEEPER" | "TRADE" | "ADD" | null>(null);
+  const [excludedTags, setExcludedTags] = useState<Set<"KEEPER" | "TRADE" | "ADD">>(new Set());
+
+  function toggleExcludeTag(tag: "KEEPER" | "TRADE" | "ADD") {
+    setExcludedTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag); else next.add(tag);
+      return next;
+    });
+  }
 
   useEffect(() => {
     fetch("/api/player-leaderboard")
@@ -622,9 +630,11 @@ function PlayersTab() {
         filterPosition === "Pitchers" ? p.type === "pitcher" :
         p.position === filterPosition
       )) &&
-      (!filterTag || (filterTag === "KEEPER" ? p.keeper : p.acquisitionType === filterTag))
+      !(excludedTags.has("KEEPER") && p.keeper) &&
+      !(excludedTags.has("TRADE") && p.acquisitionType === "TRADE") &&
+      !(excludedTags.has("ADD") && p.acquisitionType === "ADD")
     );
-  }, [players, filterManager, filterPosition, filterTag]);
+  }, [players, filterManager, filterPosition, excludedTags]);
 
   return (
     <div className="space-y-3">
@@ -668,24 +678,24 @@ function PlayersTab() {
         <div className="flex flex-wrap gap-1.5 items-center">
           <span className="text-text-muted text-xs font-semibold w-10 shrink-0">Tag</span>
           <button
-            onClick={() => setFilterTag(null)}
+            onClick={() => setExcludedTags(new Set())}
             className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-              filterTag === null ? "bg-brand-red text-white" : "bg-surface-2 text-text-muted hover:text-text-primary"
+              excludedTags.size === 0 ? "bg-brand-red text-white" : "bg-surface-2 text-text-muted hover:text-text-primary"
             }`}
           >
             All
           </button>
           {(["KEEPER", "TRADE", "ADD"] as const).map((tag) => {
-            const active = filterTag === tag;
+            const excluded = excludedTags.has(tag);
             const style =
-              tag === "KEEPER" ? (active ? "bg-amber-500 text-white" : "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25") :
-              tag === "TRADE"  ? (active ? "bg-blue-500 text-white"  : "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25")   :
-                                 (active ? "bg-surface-2 text-text-primary border border-border" : "bg-surface-2 text-text-muted hover:text-text-primary");
+              tag === "KEEPER" ? (excluded ? "bg-amber-500/10 text-amber-400/40 line-through" : "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25") :
+              tag === "TRADE"  ? (excluded ? "bg-blue-500/10 text-blue-400/40 line-through"   : "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25")   :
+                                 (excluded ? "bg-surface-2 text-text-muted/40 line-through"   : "bg-surface-2 text-text-muted hover:text-text-primary");
             const label = tag === "ADD" ? "FA" : tag;
             return (
               <button
                 key={tag}
-                onClick={() => setFilterTag(active ? null : tag)}
+                onClick={() => toggleExcludeTag(tag)}
                 className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${style}`}
               >
                 {label}
