@@ -43,7 +43,7 @@ const PITCHING_MULTS: Record<string, number> = {
 // ESPN defaultPositionId → display label
 const POSITION_LABELS: Record<number, string> = {
   1: "SP", 2: "C", 3: "1B", 4: "2B", 5: "3B",
-  6: "SS", 7: "OF", 8: "DH", 9: "OF", 10: "OF",
+  6: "SS", 7: "OF", 8: "OF", 9: "OF", 10: "DH",
   11: "RP", 12: "P",
 };
 
