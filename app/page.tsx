@@ -1416,7 +1416,7 @@ function ChatTab() {
   }, [input, loading]);
 
   return (
-    <div className="rounded-[14px] border border-border bg-surface p-4 flex flex-col" style={{ height: "min(calc(100vh - 240px), 600px)" }}>
+    <div className="rounded-[14px] border border-border bg-surface p-4 flex flex-col" style={{ height: "min(calc(100dvh - 300px), 550px)" }}>
       <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 mb-4 pr-1 min-h-0">
         {messages.length === 0 && (
           <div className="text-center py-12 text-text-muted text-sm space-y-2">
