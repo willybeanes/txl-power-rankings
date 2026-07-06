@@ -1415,26 +1415,48 @@ function ChatTab() {
     }
   }, [input, loading]);
 
+  if (messages.length === 0 && !loading) {
+    return (
+      <div className="text-center mt-8 space-y-6">
+        <div className="space-y-2">
+          <p className="text-lg font-semibold text-text-secondary">Ask TXL Bot anything</p>
+          <p className="text-text-muted text-sm">Player stats, team standings, scoring trends, and more.</p>
+        </div>
+        <div className="flex flex-wrap gap-2 justify-center">
+          {["Who's #1 right now?", "Top 5 hitters by TXL score?", "Who's the GOAT country artist?", "What's Steph's worst trade?"].map((q) => (
+            <button
+              key={q}
+              onClick={() => setInput(q)}
+              className="px-3 py-1.5 rounded-full text-xs border border-border bg-surface hover:bg-surface-2 text-text-secondary transition-colors"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2 max-w-lg mx-auto">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
+            placeholder="Ask about players, standings, stats..."
+            className="flex-1 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-red/30 focus:border-brand-red"
+          />
+          <button
+            onClick={send}
+            disabled={!input.trim()}
+            className="rounded-xl bg-brand-red hover:bg-brand-red-hover text-white px-5 py-2.5 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Send
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-[calc(100vh-180px)] max-h-[700px]">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 mb-4 pr-1">
-        {messages.length === 0 && (
-          <div className="text-center py-16 text-text-muted text-sm space-y-2">
-            <p className="text-lg font-semibold text-text-secondary">Ask TXL Bot anything</p>
-            <p>Player stats, team standings, scoring trends, and more.</p>
-            <div className="flex flex-wrap gap-2 justify-center pt-4">
-              {["Who's #1 right now?", "Top 5 hitters by TXL score?", "Who's the GOAT country artist?", "What's Steph's worst trade?"].map((q) => (
-                <button
-                  key={q}
-                  onClick={() => { setInput(q); }}
-                  className="px-3 py-1.5 rounded-full text-xs border border-border bg-surface hover:bg-surface-2 text-text-secondary transition-colors"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+    <div className="space-y-4">
+      <div ref={scrollRef} className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
@@ -1621,7 +1643,7 @@ export default function Home() {
     }
   };
 
-  if (error) {
+  if (error && activeTab !== "chat") {
     return (
       <main className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -1659,17 +1681,9 @@ export default function Home() {
         </div>
       </div>
 
-      <div className={`mx-auto pt-6 pb-8 ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"}`}>
+      <div className={`mx-auto ${activeTab === "chat" ? "pt-0 pb-0" : "pt-6 pb-8"} ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"}`}>
         {activeTab === "chat" ? (
-          <div>
-            <div className="mb-6">
-              <h2 className="text-base font-bold text-text-primary">TXL Bot</h2>
-              <p className="text-text-muted text-xs mt-0.5">
-                Ask questions about players, standings, and stats
-              </p>
-            </div>
-            <ChatTab />
-          </div>
+          <ChatTab />
         ) : activeTab === "players" ? (
           <div>
             <div className="mb-6">
