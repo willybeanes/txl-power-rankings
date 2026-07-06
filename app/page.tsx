@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { type TeamScored } from "@/lib/data";
 import { DRAFT_PICKS, DRAFT_MANAGERS, type DraftPick } from "@/lib/draft";
 
 type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore" | "era" | "moves" | "ops" | "playoffPct";
 type SortDir = "asc" | "desc";
-type Tab = "standings" | "graphs" | "draft" | "props" | "players";
+type Tab = "standings" | "graphs" | "draft" | "props" | "players" | "chat";
 
 type TradeSeriesPoint = { date: string; murakami: number; pasquantino: number };
 
@@ -1379,6 +1379,109 @@ function DraftBoard() {
   );
 }
 
+type ChatMessage = { role: "user" | "assistant"; text: string };
+
+function ChatTab() {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages]);
+
+  const send = useCallback(async () => {
+    const text = input.trim();
+    if (!text || loading) return;
+    setInput("");
+    setMessages((prev) => [...prev, { role: "user", text }]);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }),
+      });
+      const data = await res.json();
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: data.reply ?? data.error ?? "Something went wrong." },
+      ]);
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", text: "Failed to reach the server." }]);
+    } finally {
+      setLoading(false);
+    }
+  }, [input, loading]);
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-180px)] max-h-[700px]">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 mb-4 pr-1">
+        {messages.length === 0 && (
+          <div className="text-center py-16 text-text-muted text-sm space-y-2">
+            <p className="text-lg font-semibold text-text-secondary">Ask TXL Bot anything</p>
+            <p>Player stats, team standings, scoring trends, and more.</p>
+            <div className="flex flex-wrap gap-2 justify-center pt-4">
+              {["Who's #1 right now?", "Top 5 hitters by TXL score?", "Who's the GOAT country artist?", "What's Steph's worst trade?"].map((q) => (
+                <button
+                  key={q}
+                  onClick={() => { setInput(q); }}
+                  className="px-3 py-1.5 rounded-full text-xs border border-border bg-surface hover:bg-surface-2 text-text-secondary transition-colors"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {messages.map((msg, i) => (
+          <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div
+              className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
+                msg.role === "user"
+                  ? "bg-brand-red text-white rounded-br-md"
+                  : "bg-surface border border-border text-text-primary rounded-bl-md"
+              }`}
+            >
+              {msg.text}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="bg-surface border border-border rounded-2xl rounded-bl-md px-4 py-2.5 text-sm text-text-muted">
+              <span className="inline-flex gap-1">
+                <span className="animate-bounce" style={{ animationDelay: "0ms" }}>.</span>
+                <span className="animate-bounce" style={{ animationDelay: "150ms" }}>.</span>
+                <span className="animate-bounce" style={{ animationDelay: "300ms" }}>.</span>
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
+          placeholder="Ask about players, standings, stats..."
+          disabled={loading}
+          className="flex-1 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-red/30 focus:border-brand-red disabled:opacity-50"
+        />
+        <button
+          onClick={send}
+          disabled={loading || !input.trim()}
+          className="rounded-xl bg-brand-red hover:bg-brand-red-hover text-white px-5 py-2.5 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Send
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function LoadingSkeleton() {
   return (
     <div className="animate-pulse space-y-4">
@@ -1411,7 +1514,7 @@ export default function Home() {
   // Sync tab with URL (?tab=standings|graphs|draft)
   useEffect(() => {
     const param = new URLSearchParams(window.location.search).get("tab");
-    if (param === "standings" || param === "graphs" || param === "draft" || param === "props" || param === "players") {
+    if (param === "standings" || param === "graphs" || param === "draft" || param === "props" || param === "players" || param === "chat") {
       setActiveTab(param);
     }
   }, []);
@@ -1539,7 +1642,7 @@ export default function Home() {
             <p className="text-text-secondary mt-0.5 text-sm">2026 Season</p>
           </div>
           <div className="flex gap-6 mt-3">
-            {(["standings", "graphs", "draft", "props", "players"] as Tab[]).map((tab) => (
+            {(["standings", "graphs", "draft", "props", "players", "chat"] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setTab(tab)}
@@ -1557,7 +1660,17 @@ export default function Home() {
       </div>
 
       <div className={`mx-auto pt-6 pb-8 ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"}`}>
-        {activeTab === "players" ? (
+        {activeTab === "chat" ? (
+          <div>
+            <div className="mb-6">
+              <h2 className="text-base font-bold text-text-primary">TXL Bot</h2>
+              <p className="text-text-muted text-xs mt-0.5">
+                Ask questions about players, standings, and stats
+              </p>
+            </div>
+            <ChatTab />
+          </div>
+        ) : activeTab === "players" ? (
           <div>
             <div className="mb-6">
               <h2 className="text-base font-bold text-text-primary">Player Leaderboard</h2>
