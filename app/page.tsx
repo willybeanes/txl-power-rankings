@@ -1417,8 +1417,8 @@ function ChatTab() {
 
   if (messages.length === 0 && !loading) {
     return (
-      <div className="flex flex-col items-center justify-center space-y-6" style={{ height: "calc(100dvh - 140px)" }}>
-        <div className="text-center space-y-2">
+      <div className="text-center mt-8 space-y-6">
+        <div className="space-y-2">
           <p className="text-lg font-semibold text-text-secondary">Ask TXL Bot anything</p>
           <p className="text-text-muted text-sm">Player stats, team standings, scoring trends, and more.</p>
         </div>
@@ -1433,7 +1433,7 @@ function ChatTab() {
             </button>
           ))}
         </div>
-        <div className="flex gap-2 w-full max-w-lg">
+        <div className="flex gap-2 max-w-lg mx-auto">
           <input
             type="text"
             value={input}
