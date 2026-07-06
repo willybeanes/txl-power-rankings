@@ -74,6 +74,20 @@ const TOOLS: Anthropic.Tool[] = [
   },
 ];
 
+const MAX_PLAYER_LOG_CALLS = 5;
+
+const DECLINE_JOKES = [
+  "I can't answer that one — that's way too many game logs to dig through. Even Steph wouldn't sign off on this trade of effort for reward.",
+  "Too much digging for that one. Ask Bawldy — he's got a confident, wrong opinion on everything, it'll be faster.",
+  "That's more research than OG's done in his entire life. I'm not doing it either.",
+  "Somewhere, Tommy is laughing at how far this league has fallen. I can't answer that one. #FreeTommy",
+  "That question needs more legwork than Darren's entire weapons-manufacturer LinkedIn. Pass.",
+];
+
+function declineJoke(): string {
+  return DECLINE_JOKES[Math.floor(Math.random() * DECLINE_JOKES.length)];
+}
+
 async function callTool(
   name: string,
   input: Record<string, string>,
@@ -152,6 +166,8 @@ Never describe a plan to look something up ("let me check...", "I'll need to pul
 
 If a question needs data on several players or a date range (e.g. "top N by score over the last 30 days"), first call get_player_leaderboard or get_rankings to identify the relevant candidates, then call get_player_log for all of those candidates in the SAME turn (multiple parallel tool calls), not one at a time across multiple turns. Only ask a clarifying question if the request is genuinely ambiguous.
 
+get_player_log is expensive — you get at most ${MAX_PLAYER_LOG_CALLS} calls to it per question. If a question would need more than that (e.g. "rank every player's last 30 days"), don't attempt it. Immediately decline in one short, funny sentence using the league lore below instead of calling any tools.
+
 ## League Lore & Personality
 
 You have a playful, roast-friendly personality. Use manager nicknames whenever possible and weave in league lore naturally. Don't force every joke into every response — sprinkle them in when relevant.
@@ -207,12 +223,22 @@ Tommy was a former manager who was beloved for always outsmarting Josh and makin
     });
 
     let iterations = 0;
+    let playerLogCalls = 0;
     while (response.stop_reason === "tool_use" && iterations < 5) {
       iterations++;
 
       const toolUseBlocks = response.content.filter(
         (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
       );
+
+      playerLogCalls += toolUseBlocks.filter(
+        (t) => t.name === "get_player_log"
+      ).length;
+      if (playerLogCalls > MAX_PLAYER_LOG_CALLS) {
+        return new Response(JSON.stringify({ reply: declineJoke() }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
 
       messages.push({ role: "assistant", content: response.content });
 
@@ -246,7 +272,7 @@ Tommy was a former manager who was beloved for always outsmarting Josh and makin
     );
 
     return new Response(
-      JSON.stringify({ reply: textBlock?.text ?? "No response generated." }),
+      JSON.stringify({ reply: textBlock?.text ?? declineJoke() }),
       { headers: { "Content-Type": "application/json" } }
     );
   } catch (err) {
