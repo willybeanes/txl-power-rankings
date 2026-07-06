@@ -1417,7 +1417,7 @@ function ChatTab() {
 
   if (messages.length === 0 && !loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-4 space-y-6">
+      <div className="flex flex-col items-center justify-center space-y-6" style={{ minHeight: "calc(100dvh - 200px)" }}>
         <div className="text-center space-y-2">
           <p className="text-lg font-semibold text-text-secondary">Ask TXL Bot anything</p>
           <p className="text-text-muted text-sm">Player stats, team standings, scoring trends, and more.</p>
@@ -1683,15 +1683,7 @@ export default function Home() {
 
       <div className={`mx-auto pt-6 pb-8 ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"}`}>
         {activeTab === "chat" ? (
-          <div>
-            <div className="mb-6">
-              <h2 className="text-base font-bold text-text-primary">TXL Bot</h2>
-              <p className="text-text-muted text-xs mt-0.5">
-                Ask questions about players, standings, and stats
-              </p>
-            </div>
-            <ChatTab />
-          </div>
+          <ChatTab />
         ) : activeTab === "players" ? (
           <div>
             <div className="mb-6">
