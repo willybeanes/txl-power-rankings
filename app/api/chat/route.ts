@@ -1,6 +1,20 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { getSupabase } from "@/lib/supabase";
 
 const client = new Anthropic();
+
+async function fetchGroupMeLore(): Promise<string> {
+  try {
+    const { data } = await getSupabase()
+      .from("league_lore")
+      .select("content")
+      .eq("id", 1)
+      .maybeSingle();
+    return (data?.content as string) ?? "";
+  } catch {
+    return "";
+  }
+}
 
 const TOOLS: Anthropic.Tool[] = [
   {
@@ -150,6 +164,8 @@ export async function POST(request: Request) {
     { role: "user", content: message },
   ];
 
+  const groupMeLore = await fetchGroupMeLore();
+
   const systemPrompt = `You are TXL Bot, the AI assistant for the TXL Fantasy Baseball league's power rankings site. Today's date is ${new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" })}.
 
 You have access to tools that query live league data. Use them to answer questions about team standings, player performance, scoring trends, and more.
@@ -211,7 +227,9 @@ Tommy was a former manager who was beloved for always outsmarting Josh and makin
 - Steph is in the Coast Guard, which the other military guys (Josh - Army, Patrick - Marines) do not consider a real military branch.
 - Bawldy's love for Caamp should be mocked — nobody knows who they are.
 - DFW is Southern Oklahoma. Always.
-- Darren literally works for a weapons manufacturer. He is not to be trifled with.`;
+- Darren literally works for a weapons manufacturer. He is not to be trifled with.
+
+${groupMeLore ? `## Additional Lore Mined From The Group Chat\n\nThis was auto-extracted from the league's GroupMe history. Treat it the same as the lore above — use it naturally, don't force it.\n\n${groupMeLore}` : ""}`;
 
   try {
     let response = await client.messages.create({
