@@ -1381,6 +1381,33 @@ function DraftBoard() {
 
 type ChatMessage = { role: "user" | "assistant"; text: string };
 
+function renderMarkdown(text: string) {
+  const parts: (string | React.ReactElement)[] = [];
+  let key = 0;
+  const lines = text.split("\n");
+  for (let li = 0; li < lines.length; li++) {
+    if (li > 0) parts.push(<br key={`br-${key++}`} />);
+    const line = lines[li];
+    const regex = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*)/g;
+    let lastIndex = 0;
+    let match;
+    while ((match = regex.exec(line)) !== null) {
+      if (match.index > lastIndex) parts.push(line.slice(lastIndex, match.index));
+      if (match[2]) {
+        parts.push(<strong key={key}><em>{match[2]}</em></strong>);
+      } else if (match[3]) {
+        parts.push(<strong key={key}>{match[3]}</strong>);
+      } else if (match[4]) {
+        parts.push(<em key={key}>{match[4]}</em>);
+      }
+      key++;
+      lastIndex = regex.lastIndex;
+    }
+    if (lastIndex < line.length) parts.push(line.slice(lastIndex));
+  }
+  return parts;
+}
+
 function ChatTab() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -1455,7 +1482,7 @@ function ChatTab() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 mt-6">
       <div ref={scrollRef} className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -1466,7 +1493,7 @@ function ChatTab() {
                   : "bg-surface border border-border text-text-primary rounded-bl-md"
               }`}
             >
-              {msg.text}
+              {msg.role === "assistant" ? renderMarkdown(msg.text) : msg.text}
             </div>
           </div>
         ))}
