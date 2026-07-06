@@ -1643,7 +1643,7 @@ export default function Home() {
     }
   };
 
-  if (error) {
+  if (error && activeTab !== "chat") {
     return (
       <main className="min-h-screen flex items-center justify-center">
         <div className="text-center">
