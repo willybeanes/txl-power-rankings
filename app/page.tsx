@@ -1423,7 +1423,7 @@ function ChatTab() {
             <p className="text-lg font-semibold text-text-secondary">Ask TXL Bot anything</p>
             <p>Player stats, team standings, scoring trends, and more.</p>
             <div className="flex flex-wrap gap-2 justify-center pt-4">
-              {["Who's #1 right now?", "Top 5 hitters by TXL score?", "Who has the most HRs?"].map((q) => (
+              {["Who's #1 right now?", "Top 5 hitters by TXL score?", "Who's the GOAT country artist?", "What's Steph's worst trade?"].map((q) => (
                 <button
                   key={q}
                   onClick={() => { setInput(q); }}
