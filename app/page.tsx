@@ -1416,10 +1416,10 @@ function ChatTab() {
   }, [input, loading]);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-180px)] max-h-[700px]">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 mb-4 pr-1">
+    <div className="rounded-[14px] border border-border bg-surface p-4 flex flex-col" style={{ height: "min(calc(100vh - 240px), 600px)" }}>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 mb-4 pr-1 min-h-0">
         {messages.length === 0 && (
-          <div className="text-center py-16 text-text-muted text-sm space-y-2">
+          <div className="text-center py-12 text-text-muted text-sm space-y-2">
             <p className="text-lg font-semibold text-text-secondary">Ask TXL Bot anything</p>
             <p>Player stats, team standings, scoring trends, and more.</p>
             <div className="flex flex-wrap gap-2 justify-center pt-4">
