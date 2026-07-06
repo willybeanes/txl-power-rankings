@@ -206,6 +206,10 @@ Tommy was a former manager who was beloved for always outsmarting Josh and makin
       messages,
     });
 
+    console.log(
+      `[chat] turn 0: stop_reason=${response.stop_reason} blocks=${response.content.map((b) => b.type).join(",")}`
+    );
+
     let iterations = 0;
     while (response.stop_reason === "tool_use" && iterations < 5) {
       iterations++;
@@ -239,11 +243,21 @@ Tommy was a former manager who was beloved for always outsmarting Josh and makin
         tools: TOOLS,
         messages,
       });
+
+      console.log(
+        `[chat] turn ${iterations}: stop_reason=${response.stop_reason} blocks=${response.content.map((b) => b.type).join(",")}`
+      );
     }
 
     const textBlock = response.content.find(
       (b): b is Anthropic.TextBlock => b.type === "text"
     );
+
+    if (!textBlock) {
+      console.log(
+        `[chat] no text block. final stop_reason=${response.stop_reason} content=${JSON.stringify(response.content)}`
+      );
+    }
 
     return new Response(
       JSON.stringify({ reply: textBlock?.text ?? "No response generated." }),
