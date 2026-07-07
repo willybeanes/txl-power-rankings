@@ -16,7 +16,7 @@ const LORE_EXTRACTION_BATCH_SIZE = 300;
 const BACKFILL_PAGES_PER_RUN = 10;
 
 /** Don't backfill further back than this — older jokes aren't worth the cost. */
-const BACKFILL_CUTOFF_UNIX = Math.floor(new Date("2022-01-01T00:00:00Z").getTime() / 1000);
+const BACKFILL_CUTOFF_UNIX = Math.floor(new Date("2024-01-01T00:00:00Z").getTime() / 1000);
 
 const EXTRACTION_SYSTEM_PROMPT = `You maintain a running "league lore" doc for a fantasy baseball league's GroupMe chat. You'll be given the current lore doc (may be empty) and a batch of new chat messages. Update the doc:
 
