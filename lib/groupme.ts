@@ -9,7 +9,7 @@ export interface GroupMeMessage {
   system: boolean;
 }
 
-async function fetchPage(
+export async function fetchPage(
   groupId: string,
   token: string,
   cursor: { before_id?: string; after_id?: string }
@@ -27,27 +27,38 @@ async function fetchPage(
 }
 
 /**
- * Full history backfill, paging backwards from the most recent message.
- * Only used when there's no prior sync state.
+ * Fetch up to maxPages pages going backward in time from beforeId (or the most
+ * recent messages if beforeId is unset). Returns the messages plus a cursor for
+ * the next call and whether we've run out of older history to fetch.
  */
-export async function fetchAllHistory(
+export async function fetchBackfillChunk(
   groupId: string,
-  token: string
-): Promise<GroupMeMessage[]> {
+  token: string,
+  beforeId: string | undefined,
+  maxPages: number
+): Promise<{ messages: GroupMeMessage[]; nextBeforeId: string | undefined; exhausted: boolean }> {
   const all: GroupMeMessage[] = [];
-  let beforeId: string | undefined;
-  while (true) {
-    const page = await fetchPage(groupId, token, beforeId ? { before_id: beforeId } : {});
-    if (page.length === 0) break;
+  let cursor = beforeId;
+  let exhausted = false;
+  for (let i = 0; i < maxPages; i++) {
+    const page = await fetchPage(groupId, token, cursor ? { before_id: cursor } : {});
+    if (page.length === 0) {
+      exhausted = true;
+      break;
+    }
     all.push(...page);
-    beforeId = page[page.length - 1].id;
-    if (page.length < PAGE_LIMIT) break;
+    cursor = page[page.length - 1].id;
+    if (page.length < PAGE_LIMIT) {
+      exhausted = true;
+      break;
+    }
   }
-  return all;
+  return { messages: all, nextBeforeId: cursor, exhausted };
 }
 
 /**
- * Fetch only messages newer than lastMessageId, paging forward.
+ * Fetch all messages newer than lastMessageId, paging forward. Meant for a
+ * small daily catch-up, not a large backfill.
  */
 export async function fetchNewMessages(
   groupId: string,

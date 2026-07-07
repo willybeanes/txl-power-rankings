@@ -9,7 +9,9 @@ create table if not exists groupme_messages (
 
 create table if not exists groupme_sync_state (
   id int primary key default 1,
-  last_message_id text,
+  live_after_id text,
+  backfill_before_id text,
+  backfill_done boolean not null default false,
   updated_at timestamptz not null default now()
 );
 
