@@ -1422,13 +1422,14 @@ function ChatTab() {
     const text = input.trim();
     if (!text || loading) return;
     setInput("");
+    const history = messages; // prior turns, sent so the bot has conversation context
     setMessages((prev) => [...prev, { role: "user", text }]);
     setLoading(true);
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, history }),
       });
       const data = await res.json();
       setMessages((prev) => [
@@ -1440,7 +1441,7 @@ function ChatTab() {
     } finally {
       setLoading(false);
     }
-  }, [input, loading]);
+  }, [input, loading, messages]);
 
   if (messages.length === 0 && !loading) {
     return (
