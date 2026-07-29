@@ -195,7 +195,19 @@ async function callTool(
   return JSON.stringify(await res.json());
 }
 
+// Kill switch: the chat UI is hidden while we figure out cost controls, but
+// this guarantees zero Anthropic API cost from any direct/residual request
+// to this route too. Flip CHAT_DISABLED to false to bring it back.
+const CHAT_DISABLED = true;
+
 export async function POST(request: Request) {
+  if (CHAT_DISABLED) {
+    return new Response(
+      JSON.stringify({ reply: "Chat is temporarily offline — check back soon." }),
+      { status: 503, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return new Response(

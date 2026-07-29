@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { type TeamScored } from "@/lib/data";
 import { DRAFT_PICKS, DRAFT_MANAGERS, type DraftPick } from "@/lib/draft";
 
 type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore" | "era" | "moves" | "ops" | "playoffPct";
 type SortDir = "asc" | "desc";
-type Tab = "standings" | "graphs" | "draft" | "props" | "players" | "chat";
+type Tab = "standings" | "graphs" | "draft" | "props" | "players";
 
 type TradeSeriesPoint = { date: string; murakami: number; pasquantino: number };
 
@@ -1379,159 +1379,6 @@ function DraftBoard() {
   );
 }
 
-type ChatMessage = { role: "user" | "assistant"; text: string };
-
-function renderMarkdown(text: string) {
-  const parts: (string | React.ReactElement)[] = [];
-  let key = 0;
-  const lines = text.split("\n");
-  for (let li = 0; li < lines.length; li++) {
-    if (li > 0) parts.push(<br key={`br-${key++}`} />);
-    const line = lines[li];
-    const regex = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*)/g;
-    let lastIndex = 0;
-    let match;
-    while ((match = regex.exec(line)) !== null) {
-      if (match.index > lastIndex) parts.push(line.slice(lastIndex, match.index));
-      if (match[2]) {
-        parts.push(<strong key={key}><em>{match[2]}</em></strong>);
-      } else if (match[3]) {
-        parts.push(<strong key={key}>{match[3]}</strong>);
-      } else if (match[4]) {
-        parts.push(<em key={key}>{match[4]}</em>);
-      }
-      key++;
-      lastIndex = regex.lastIndex;
-    }
-    if (lastIndex < line.length) parts.push(line.slice(lastIndex));
-  }
-  return parts;
-}
-
-function ChatTab() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
-
-  const send = useCallback(async () => {
-    const text = input.trim();
-    if (!text || loading) return;
-    setInput("");
-    const history = messages; // prior turns, sent so the bot has conversation context
-    setMessages((prev) => [...prev, { role: "user", text }]);
-    setLoading(true);
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, history }),
-      });
-      const data = await res.json();
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: data.reply ?? data.error ?? "Something went wrong." },
-      ]);
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", text: "Failed to reach the server." }]);
-    } finally {
-      setLoading(false);
-    }
-  }, [input, loading, messages]);
-
-  if (messages.length === 0 && !loading) {
-    return (
-      <div className="text-center mt-8 space-y-6">
-        <div className="space-y-2">
-          <p className="text-lg font-semibold text-text-secondary">Ask TXL Bot anything</p>
-          <p className="text-text-muted text-sm">Player stats, team standings, scoring trends, and more.</p>
-        </div>
-        <div className="flex flex-wrap gap-2 justify-center">
-          {["Who's #1 right now?", "Top 5 hitters by TXL score?", "Who's the GOAT country artist?", "What's Steph's worst trade?"].map((q) => (
-            <button
-              key={q}
-              onClick={() => setInput(q)}
-              className="px-3 py-1.5 rounded-full text-xs border border-border bg-surface hover:bg-surface-2 text-text-secondary transition-colors"
-            >
-              {q}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-2 max-w-lg mx-auto">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
-            placeholder="Ask about players, standings, stats..."
-            className="flex-1 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-red/30 focus:border-brand-red"
-          />
-          <button
-            onClick={send}
-            disabled={!input.trim()}
-            className="rounded-xl bg-brand-red hover:bg-brand-red-hover text-white px-5 py-2.5 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Send
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4 mt-6">
-      <div ref={scrollRef} className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div
-              className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
-                msg.role === "user"
-                  ? "bg-brand-red text-white rounded-br-md"
-                  : "bg-surface border border-border text-text-primary rounded-bl-md"
-              }`}
-            >
-              {msg.role === "assistant" ? renderMarkdown(msg.text) : msg.text}
-            </div>
-          </div>
-        ))}
-        {loading && (
-          <div className="flex justify-start">
-            <div className="bg-surface border border-border rounded-2xl rounded-bl-md px-4 py-2.5 text-sm text-text-muted">
-              <span className="inline-flex gap-1">
-                <span className="animate-bounce" style={{ animationDelay: "0ms" }}>.</span>
-                <span className="animate-bounce" style={{ animationDelay: "150ms" }}>.</span>
-                <span className="animate-bounce" style={{ animationDelay: "300ms" }}>.</span>
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
-          placeholder="Ask about players, standings, stats..."
-          disabled={loading}
-          className="flex-1 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-red/30 focus:border-brand-red disabled:opacity-50"
-        />
-        <button
-          onClick={send}
-          disabled={loading || !input.trim()}
-          className="rounded-xl bg-brand-red hover:bg-brand-red-hover text-white px-5 py-2.5 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Send
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function LoadingSkeleton() {
   return (
     <div className="animate-pulse space-y-4">
@@ -1564,7 +1411,7 @@ export default function Home() {
   // Sync tab with URL (?tab=standings|graphs|draft)
   useEffect(() => {
     const param = new URLSearchParams(window.location.search).get("tab");
-    if (param === "standings" || param === "graphs" || param === "draft" || param === "props" || param === "players" || param === "chat") {
+    if (param === "standings" || param === "graphs" || param === "draft" || param === "props" || param === "players") {
       setActiveTab(param);
     }
   }, []);
@@ -1671,7 +1518,7 @@ export default function Home() {
     }
   };
 
-  if (error && activeTab !== "chat") {
+  if (error) {
     return (
       <main className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -1692,7 +1539,7 @@ export default function Home() {
             <p className="text-text-secondary mt-0.5 text-sm">2026 Season</p>
           </div>
           <div className="flex gap-6 mt-3">
-            {(["standings", "graphs", "draft", "props", "players", "chat"] as Tab[]).map((tab) => (
+            {(["standings", "graphs", "draft", "props", "players"] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setTab(tab)}
@@ -1709,10 +1556,8 @@ export default function Home() {
         </div>
       </div>
 
-      <div className={`mx-auto ${activeTab === "chat" ? "pt-0 pb-0" : "pt-6 pb-8"} ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"}`}>
-        {activeTab === "chat" ? (
-          <ChatTab />
-        ) : activeTab === "players" ? (
+      <div className={`mx-auto pt-6 pb-8 ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"}`}>
+        {activeTab === "players" ? (
           <div>
             <div className="mb-6">
               <h2 className="text-base font-bold text-text-primary">Player Leaderboard</h2>
