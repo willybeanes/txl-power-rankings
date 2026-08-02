@@ -106,8 +106,15 @@ export async function GET(request: Request) {
       });
       const data = await res.json();
       const all = Array.isArray(data.transactions) ? data.transactions : [];
-      const trade = all.find((t: Record<string, unknown>) => typeof t.type === "string" && t.type.includes("TRADE"));
-      return Response.json({ totalTransactions: all.length, sampleKeys: all[0] ? Object.keys(all[0]) : [], firstTradeRecord: trade ?? null });
+      const trades = all.filter((t: Record<string, unknown>) => typeof t.type === "string" && t.type.includes("TRADE"));
+      const byId = new Map(all.map((t: Record<string, unknown>) => [t.id, t]));
+      const first = trades[0];
+      const related = first ? byId.get(first.relatedTransactionId) : null;
+      return Response.json({
+        totalTransactions: all.length,
+        allTradeRecords: trades,
+        relatedRecordForFirst: related ?? null,
+      });
     }
 
     let csv = csvRow([
