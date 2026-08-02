@@ -95,6 +95,21 @@ export async function GET(request: Request) {
       });
     }
 
+    if (new URL(request.url).searchParams.get("debug") === "raw") {
+      const leagueId = process.env.ESPN_LEAGUE_ID;
+      const espnS2 = process.env.ESPN_S2;
+      const swid = process.env.ESPN_SWID;
+      const base = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/seasons/2026/segments/0/leagues/${leagueId}`;
+      const res = await fetch(`${base}?view=mTransactions2`, {
+        headers: { Cookie: `espn_s2=${espnS2}; SWID=${swid}` },
+        cache: "no-store",
+      });
+      const data = await res.json();
+      const all = Array.isArray(data.transactions) ? data.transactions : [];
+      const trade = all.find((t: Record<string, unknown>) => typeof t.type === "string" && t.type.includes("TRADE"));
+      return Response.json({ totalTransactions: all.length, sampleKeys: all[0] ? Object.keys(all[0]) : [], firstTradeRecord: trade ?? null });
+    }
+
     let csv = csvRow([
       "source_message_id",
       "posted_at",
