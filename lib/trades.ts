@@ -24,6 +24,9 @@ export interface PickMovement {
   // For an "acquired" entry: who the pick originally belonged to.
   // For a "given" entry: who currently holds the pick now.
   otherManager: string;
+  // Managers who held the pick in between otherManager and the current
+  // summary's manager, in order, when it changed hands more than once.
+  viaPath: string[];
 }
 
 export interface ManagerPickSummary {
@@ -32,9 +35,15 @@ export interface ManagerPickSummary {
   given: PickMovement[];
 }
 
+/**
+ * Picks for years at or before this are for a draft that's already happened —
+ * excluded from the ledger since they're no longer live trade capital. Bump
+ * this once a year, after that year's draft completes.
+ */
+export const MIN_RELEVANT_PICK_YEAR = 2027;
+
 interface PickChain {
-  originalOwner: string;
-  currentHolder: string;
+  path: string[]; // path[0] = original owner, path[path.length - 1] = current holder
 }
 
 /**
@@ -46,14 +55,15 @@ interface PickChain {
  * "2027 5th round pick", so (year, round) alone can collide across many
  * unrelated trades (e.g. Kevin's own 2027 R5 going to Porter, and separately
  * Austin's own 2027 R5 going to Andrew, are two completely independent
- * picks). Each (year, round) bucket tracks a *list* of active chains
- * ({originalOwner, currentHolder}); a transfer continues whichever chain is
- * currently held by its `from` manager, or starts a new chain if `from`
- * doesn't hold any chain in that bucket yet (meaning they're moving their
- * own still-untouched pick). If a manager holds more than one chain for the
- * same (year, round) at once — e.g. their own plus one acquired earlier —
- * `viaHint` (from an announcement like "13 (via Austin)") picks the right
- * one; otherwise the oldest matching chain is used as a fallback.
+ * picks). Each (year, round) bucket tracks a *list* of active chains (an
+ * ordered path of every manager who has held that specific pick); a transfer
+ * continues whichever chain is currently held by its `from` manager, or
+ * starts a new chain if `from` doesn't hold any chain in that bucket yet
+ * (meaning they're moving their own still-untouched pick). If a manager
+ * holds more than one chain for the same (year, round) at once — e.g. their
+ * own plus one acquired earlier — `viaHint` (from an announcement like "13
+ * (via Austin)") picks the right one; otherwise the oldest matching chain is
+ * used as a fallback.
  */
 export function computePickLedger(trades: Trade[]): ManagerPickSummary[] {
   const sorted = [...trades].sort((a, b) => a.date.localeCompare(b.date));
@@ -63,24 +73,25 @@ export function computePickLedger(trades: Trade[]): ManagerPickSummary[] {
   for (const trade of sorted) {
     for (const t of trade.transfers) {
       if (t.type !== "pick" || t.pickYear == null || t.pickRound == null) continue;
+      if (t.pickYear <= MIN_RELEVANT_PICK_YEAR - 1) continue;
       const key = `${t.pickYear}-${t.pickRound}`;
       const chains = chainsByKey.get(key) ?? [];
       if (chains.length === 0) chainsByKey.set(key, chains);
 
-      const candidates = chains.filter((c) => c.currentHolder === t.from);
+      const candidates = chains.filter((c) => c.path[c.path.length - 1] === t.from);
 
       let chain: PickChain;
       if (candidates.length === 0) {
-        chain = { originalOwner: t.from, currentHolder: t.from };
+        chain = { path: [t.from] };
         chains.push(chain);
       } else if (candidates.length === 1) {
         chain = candidates[0];
       } else {
         chain =
-          (t.viaHint ? candidates.find((c) => c.originalOwner === t.viaHint) : undefined) ??
+          (t.viaHint ? candidates.find((c) => c.path[0] === t.viaHint) : undefined) ??
           candidates[0];
       }
-      chain.currentHolder = t.to;
+      chain.path.push(t.to);
     }
   }
 
@@ -99,10 +110,14 @@ export function computePickLedger(trades: Trade[]): ManagerPickSummary[] {
     const year = Number(yearStr);
     const round = Number(roundStr);
 
-    for (const { originalOwner, currentHolder } of chains) {
+    for (const { path } of chains) {
+      const originalOwner = path[0];
+      const currentHolder = path[path.length - 1];
       if (currentHolder === originalOwner) continue; // moved and came back — net no change
-      getSummary(currentHolder).acquired.push({ year, round, otherManager: originalOwner });
-      getSummary(originalOwner).given.push({ year, round, otherManager: currentHolder });
+
+      const viaPath = path.slice(1, -1);
+      getSummary(currentHolder).acquired.push({ year, round, otherManager: originalOwner, viaPath });
+      getSummary(originalOwner).given.push({ year, round, otherManager: currentHolder, viaPath });
     }
   }
 

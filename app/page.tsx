@@ -1467,7 +1467,11 @@ function TeamsPickLedger({ trades }: { trades: Trade[] }) {
                     <ul className="text-xs text-text-secondary space-y-0.5">
                       {acquired.map((p, i) => (
                         <li key={i}>
-                          {p.year} R{p.round} <span className="text-text-muted">(from {managerShortName(p.otherManager)})</span>
+                          {p.year} R{p.round}{" "}
+                          <span className="text-text-muted">
+                            (from {managerShortName(p.otherManager)}
+                            {p.viaPath.length > 0 && ` via ${p.viaPath.map(managerShortName).join(", ")}`})
+                          </span>
                         </li>
                       ))}
                     </ul>
@@ -1479,7 +1483,11 @@ function TeamsPickLedger({ trades }: { trades: Trade[] }) {
                     <ul className="text-xs text-text-secondary space-y-0.5">
                       {given.map((p, i) => (
                         <li key={i}>
-                          {p.year} R{p.round} <span className="text-text-muted">(to {managerShortName(p.otherManager)})</span>
+                          {p.year} R{p.round}{" "}
+                          <span className="text-text-muted">
+                            (to {managerShortName(p.otherManager)}
+                            {p.viaPath.length > 0 && ` via ${p.viaPath.map(managerShortName).join(", ")}`})
+                          </span>
                         </li>
                       ))}
                     </ul>
@@ -1513,7 +1521,19 @@ function TransactionsTab() {
     <div>
       <div className="mb-6">
         <h2 className="text-base font-bold text-text-primary">Transactions</h2>
-        <p className="text-text-muted text-xs mt-0.5">Trades since 2024, and future pick ownership</p>
+        <p className="text-text-muted text-xs mt-0.5">Trades since 2025, with future pick ownership consideration</p>
+        <p className="text-text-muted text-xs mt-1">
+          Unofficial — automatically tallied from the GroupMe chat. Consult the{" "}
+          <a
+            href="https://docs.google.com/spreadsheets/d/1XDeCzkwIskH_oYo7TXZqscSgTOtsR6_Z9-zusJbE7S0/edit?usp=drive_web&ouid=101131334239902350867"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-text-secondary"
+          >
+            league spreadsheet
+          </a>{" "}
+          for the latest official tally.
+        </p>
       </div>
 
       <div className="flex gap-4 mb-6 border-b border-border">
