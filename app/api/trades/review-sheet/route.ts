@@ -8,29 +8,51 @@ const MATCH_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 const SEASONS = [2024, 2025, 2026];
 
 /**
- * Best-effort scan for "2027 3rd round pick" / "2027 R3" / "2028 5th rd" style
- * mentions — a hint for the reviewer, not authoritative. Anchors on a year
- * token, then looks for a round designator nearby. Purely informal shorthand
- * with no "round"/"rd"/"R" marker at all (e.g. "2025 2nd for 2026 4th") won't
- * be caught — the reviewer still sees the raw text either way.
+ * Best-effort scan for draft-pick mentions — a hint for the reviewer, not
+ * authoritative. This league almost always drops the word "round" entirely
+ * (e.g. "Charley receives\n15th", "Andrew gets 2027 4", "Bergoine gets: |
+ * 4th | 10th") rather than writing "3rd round pick"/"R3", so three patterns
+ * are combined:
+ *  - a year anchor with an explicit round word nearby ("2027 3rd round",
+ *    "2028 5th rd", "R3") — the least common phrasing but still shows up
+ *  - a bare ordinal/number alone on its own line (this league's asset-list
+ *    format is one item per line under "[Manager] receives/gets")
+ *  - a bare ordinal/number immediately after "receives"/"gets"/"get",
+ *    optionally with a leading year ("Andrew receives 5", "gets 2027 4")
  */
 const YEAR_RE = /20[2-3]\d/g;
-const ROUND_RE =
+const ROUND_WORD_RE =
   /\b(?:R|Rd\.?|Round)\s*(\d{1,2})\b|\b(\d{1,2})(?:st|nd|rd|th)?\s*(?:rounder|round|rd\.?)\b/gi;
+const STANDALONE_LINE_RE = /^\s*(?:a\s+|my\s+)?(\d{1,2})(?:st|nd|rd|th)?\s*(?:pick)?\s*(?:\([^)]*\))?\s*$/i;
+const INLINE_AFTER_VERB_RE =
+  /\b(?:receives?|gets?)\s+(?:my\s+|a\s+)?(?:(20[2-3]\d)\s+)?(\d{1,2})(?:st|nd|rd|th)?\b/gi;
 
 function findPickMentions(text: string): string[] {
   const mentions = new Set<string>();
+
   for (const y of text.matchAll(YEAR_RE)) {
     const yearStr = y[0];
     const yearIdx = y.index ?? 0;
     const window = text.slice(Math.max(0, yearIdx - 30), Math.min(text.length, yearIdx + yearStr.length + 30));
-    ROUND_RE.lastIndex = 0;
+    ROUND_WORD_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
-    while ((m = ROUND_RE.exec(window)) !== null) {
+    while ((m = ROUND_WORD_RE.exec(window)) !== null) {
       const round = m[1] ?? m[2];
-      if (round) mentions.add(`${yearStr} R${round}`);
+      if (round) mentions.add(`${yearStr} pick ${round}`);
     }
   }
+
+  for (const line of text.split("\n")) {
+    const m = STANDALONE_LINE_RE.exec(line.trim());
+    if (m) mentions.add(`pick ${m[1]}`);
+  }
+
+  INLINE_AFTER_VERB_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = INLINE_AFTER_VERB_RE.exec(text)) !== null) {
+    mentions.add(m[1] ? `${m[1]} pick ${m[2]}` : `pick ${m[2]}`);
+  }
+
   return [...mentions];
 }
 
