@@ -65,8 +65,7 @@ export interface PlayerEntry {
   acquisitionType: "DRAFT" | "ADD" | "TRADE";
 }
 
-export async function GET(request: Request) {
-  const debugName = new URL(request.url).searchParams.get("debugPlayer");
+export async function GET() {
   const leagueId = process.env.ESPN_LEAGUE_ID;
   const espnS2 = process.env.ESPN_S2;
   const swid = process.env.ESPN_SWID;
@@ -102,7 +101,6 @@ export async function GET(request: Request) {
   }
 
   const players: PlayerEntry[] = [];
-  const debugRows: { name: string; manager: string; draftedBy: string | null; espnAcquisitionType: string | null }[] = [];
 
   for (const team of data.teams ?? []) {
     const manager = memberNames[team.primaryOwner] ?? team.abbrev;
@@ -112,23 +110,19 @@ export async function GET(request: Request) {
       const player = entry.playerPoolEntry?.player;
       if (!player) continue;
 
-      if (debugName === "__DISTRIBUTION__") {
-        debugRows.push({
-          name: player.fullName,
-          manager,
-          draftedBy: draftManagerByName[player.fullName] ?? null,
-          espnAcquisitionType: entry.acquisitionType ?? null,
-        });
-      } else if (debugName && player.fullName === debugName) {
-        return NextResponse.json({ manager, draftedBy: draftManagerByName[player.fullName], entryKeys: Object.keys(entry), entry });
-      }
-
       // Derive acquisition type:
-      // - in DRAFT_PICKS + still with original drafter = DRAFT
-      // - otherwise trust ESPN's acquisitionType (ADD = waiver/FA, TRADE = traded)
+      // - ESPN's "ADD" is reliable, so trust it even if this manager originally
+      //   drafted the same player (they dropped and later re-added them —
+      //   confirmed real cases: Dansby Swanson, Cade Cavalli, Bryce Eldridge)
+      // - ESPN's "TRADE" is NOT reliable (e.g. Yordan Alvarez, Jackson Chourio
+      //   both show TRADE despite never being traded) — for those, trust the
+      //   static draft list instead when this manager is the original drafter
+      // - otherwise trust ESPN's TRADE, falling back to ADD
       const draftedBy = draftManagerByName[player.fullName];
       const acquisitionType: "DRAFT" | "ADD" | "TRADE" =
-        draftedBy && draftedBy === manager
+        entry.acquisitionType === "ADD"
+          ? "ADD"
+          : draftedBy && draftedBy === manager
           ? "DRAFT"
           : entry.acquisitionType === "TRADE"
           ? "TRADE"
@@ -177,16 +171,6 @@ export async function GET(request: Request) {
         acquisitionType,
       });
     }
-  }
-
-  if (debugName === "__DISTRIBUTION__") {
-    const espnTypeCounts: Record<string, number> = {};
-    const mismatches = debugRows.filter((r) => r.draftedBy === r.manager && r.espnAcquisitionType !== "DRAFT");
-    for (const r of debugRows) {
-      const k = r.espnAcquisitionType ?? "null";
-      espnTypeCounts[k] = (espnTypeCounts[k] ?? 0) + 1;
-    }
-    return NextResponse.json({ totalRows: debugRows.length, espnTypeCounts, mismatchCount: mismatches.length, mismatches });
   }
 
   // Sort all players by TXL score descending
