@@ -34,6 +34,26 @@ function findPickMentions(text: string): string[] {
   return [...mentions];
 }
 
+/**
+ * This GroupMe channel is also used to run the annual slow draft: each pick
+ * gets posted as a terse "PlayerName @NextManager" (or "@me") relay message
+ * with no trade-ish language at all — hundreds of these per draft, no
+ * "trade"/"receives"/etc. Filter them out so the review sheet isn't 30%+
+ * draft noise. Real trade messages in this league consistently use trade
+ * language (see TRADE_KEYWORDS below), so requiring its absence here is safe
+ * — verified against known real trade announcements before shipping.
+ */
+const TRADE_KEYWORDS = /\b(trade|trading|traded|receives?|swap|deal|surplus)\b/i;
+const TRAILING_MENTION_RE = /@\s?(\S+(\s\S+)?)\s*$|@me\s*$/i;
+const DRAFT_RELAY_MAX_LENGTH = 60;
+
+function isLikelyDraftRelay(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length > DRAFT_RELAY_MAX_LENGTH) return false;
+  if (TRADE_KEYWORDS.test(trimmed)) return false;
+  return TRAILING_MENTION_RE.test(trimmed);
+}
+
 function csvCell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
@@ -49,6 +69,29 @@ interface TradeMessageRow {
   created_at: string;
 }
 
+const SUPABASE_PAGE_SIZE = 1000;
+
+/** Supabase/PostgREST caps a single select at 1000 rows by default — page through everything. */
+async function fetchAllTradeMessages(
+  supabase: ReturnType<typeof getSupabase>
+): Promise<TradeMessageRow[]> {
+  const all: TradeMessageRow[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("trade_messages")
+      .select("id, sender_name, text, created_at")
+      .order("created_at", { ascending: true })
+      .range(from, from + SUPABASE_PAGE_SIZE - 1);
+    if (error) throw new Error(`Supabase trade_messages error: ${error.message}`);
+    const page = (data ?? []) as TradeMessageRow[];
+    all.push(...page);
+    if (page.length < SUPABASE_PAGE_SIZE) break;
+    from += SUPABASE_PAGE_SIZE;
+  }
+  return all;
+}
+
 export async function GET(request: Request) {
   const secret = new URL(request.url).searchParams.get("secret");
   if (secret !== process.env.CRON_SECRET) {
@@ -58,20 +101,19 @@ export async function GET(request: Request) {
   try {
     const supabase = getSupabase();
 
-    const [{ data: messages, error: msgError }, { data: existingTrades, error: tradeError }] =
-      await Promise.all([
-        supabase
-          .from("trade_messages")
-          .select("id, sender_name, text, created_at")
-          .order("created_at", { ascending: true }),
-        supabase.from("trades").select("source_message_id"),
-      ]);
-    if (msgError) throw new Error(`Supabase trade_messages error: ${msgError.message}`);
+    const [messages, { data: existingTrades, error: tradeError }] = await Promise.all([
+      fetchAllTradeMessages(supabase),
+      supabase.from("trades").select("source_message_id"),
+    ]);
     if (tradeError) throw new Error(`Supabase trades error: ${tradeError.message}`);
 
     const alreadyStructured = new Set((existingTrades ?? []).map((t) => t.source_message_id as string));
-    const pending = ((messages ?? []) as TradeMessageRow[]).filter(
-      (m) => !alreadyStructured.has(m.id) && m.text && m.text.trim().length > 0
+    const pending = messages.filter(
+      (m) =>
+        !alreadyStructured.has(m.id) &&
+        m.text &&
+        m.text.trim().length > 0 &&
+        !isLikelyDraftRelay(m.text)
     );
 
     const espnResults = await Promise.allSettled(SEASONS.map((s) => fetchTradeActivity(s)));
