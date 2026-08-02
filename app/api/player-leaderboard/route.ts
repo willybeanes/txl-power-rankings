@@ -65,7 +65,8 @@ export interface PlayerEntry {
   acquisitionType: "DRAFT" | "ADD" | "TRADE";
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const debugName = new URL(request.url).searchParams.get("debugPlayer");
   const leagueId = process.env.ESPN_LEAGUE_ID;
   const espnS2 = process.env.ESPN_S2;
   const swid = process.env.ESPN_SWID;
@@ -109,6 +110,11 @@ export async function GET() {
     for (const entry of team.roster?.entries ?? []) {
       const player = entry.playerPoolEntry?.player;
       if (!player) continue;
+
+      if (debugName && player.fullName === debugName) {
+        return NextResponse.json({ manager, draftedBy: draftManagerByName[player.fullName], entryKeys: Object.keys(entry), entry });
+      }
+
       // Derive acquisition type:
       // - in DRAFT_PICKS + still with original drafter = DRAFT
       // - otherwise trust ESPN's acquisitionType (ADD = waiver/FA, TRADE = traded)
