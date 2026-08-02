@@ -82,6 +82,19 @@ export async function GET(request: Request) {
       .map((r, i) => (r.status === "rejected" ? `${SEASONS[i]}: ${r.reason}` : null))
       .filter((x): x is string => x !== null);
 
+    if (new URL(request.url).searchParams.get("debug") === "1") {
+      return Response.json({
+        pendingMessageCount: pending.length,
+        perSeason: SEASONS.map((s, i) => ({
+          season: s,
+          status: espnResults[i].status,
+          count: espnResults[i].status === "fulfilled" ? (espnResults[i] as PromiseFulfilledResult<ESPNTradeTransaction[]>).value.length : null,
+          error: espnResults[i].status === "rejected" ? String((espnResults[i] as PromiseRejectedResult).reason) : null,
+        })),
+        sampleTrades: espnTrades.slice(0, 5),
+      });
+    }
+
     let csv = csvRow([
       "source_message_id",
       "posted_at",
