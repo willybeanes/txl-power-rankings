@@ -1,18 +1,11 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "@/lib/supabase";
-import { DRAFT_MANAGERS } from "@/lib/draft";
 import {
   fetchPage,
   fetchBackfillChunk,
   fetchNewMessages,
   type GroupMeMessage,
 } from "@/lib/groupme";
-import type { Trade, TradeTransfer } from "@/lib/trades";
-
-const client = new Anthropic();
-
-const EXTRACTION_BATCH_SIZE = 50;
 
 /** How many GroupMe pages (100 msgs each) of older history to pull per cron run. */
 const BACKFILL_PAGES_PER_RUN = 10;
@@ -20,130 +13,18 @@ const BACKFILL_PAGES_PER_RUN = 10;
 /** Trade history only goes back this far. */
 const BACKFILL_CUTOFF_UNIX = Math.floor(new Date("2024-01-01T00:00:00Z").getTime() / 1000);
 
-const ROSTER = DRAFT_MANAGERS.map((m) => m.fullName).join(", ");
-
-const EXTRACTION_SYSTEM_PROMPT = `You extract completed fantasy baseball trades from a batch of GroupMe messages posted in this league's trade-announcement channel. The 12 managers in this league are: ${ROSTER}.
-
-For each message that announces an ALREADY-COMPLETED trade (not a proposal, offer, rumor, or reaction), call record_trades with one trade entry per completed trade announced. For every asset that changed hands, record:
-- type "player" with playerName, or type "pick" with pickYear and pickRound (the draft round number, e.g. 3 for a 3rd-round pick)
-- from: the manager who gave up the asset
-- to: the manager who received it
-
-Use each manager's exact full name from the roster above (normalize nicknames/GroupMe display names to the closest roster match). Ignore messages that aren't trade announcements — jokes, chatter, reactions, unaccepted offers, or draft reminders. If a batch has no trade announcements, call record_trades with an empty trades array.`;
-
-const EXTRACTION_TOOL: Anthropic.Tool = {
-  name: "record_trades",
-  description: "Record zero or more completed trades found in this batch of messages.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      trades: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            source_message_id: {
-              type: "string",
-              description: "The id of the message that announced this trade",
-            },
-            date: { type: "string", description: "ISO date (YYYY-MM-DD) the trade was announced" },
-            summary: {
-              type: "string",
-              description: "One sentence human-readable summary of the trade",
-            },
-            transfers: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  type: { type: "string", enum: ["player", "pick"] },
-                  player_name: { type: "string" },
-                  pick_year: { type: "integer" },
-                  pick_round: { type: "integer" },
-                  from_manager: { type: "string" },
-                  to_manager: { type: "string" },
-                },
-                required: ["type", "from_manager", "to_manager"],
-              },
-            },
-          },
-          required: ["source_message_id", "date", "summary", "transfers"],
-        },
-      },
-    },
-    required: ["trades"],
-  },
-};
-
-interface ExtractedTradeInput {
-  source_message_id: string;
-  date: string;
-  summary: string;
-  transfers: {
-    type: "player" | "pick";
-    player_name?: string;
-    pick_year?: number;
-    pick_round?: number;
-    from_manager: string;
-    to_manager: string;
-  }[];
-}
-
-function formatMessages(messages: GroupMeMessage[]): string {
-  return messages
-    .filter((m) => !m.system && m.text && m.text.trim().length > 0)
-    .map((m) => `[id=${m.id}] ${m.name}: ${m.text}`)
-    .join("\n");
-}
-
-async function extractTrades(
-  batch: GroupMeMessage[],
-  rawById: Map<string, string>
-): Promise<Trade[]> {
-  const formatted = formatMessages(batch);
-  if (!formatted) return [];
-
-  const response = await client.messages.create({
-    model: "claude-sonnet-5",
-    max_tokens: 4096,
-    system: EXTRACTION_SYSTEM_PROMPT,
-    tools: [EXTRACTION_TOOL],
-    tool_choice: { type: "tool", name: "record_trades" },
-    messages: [{ role: "user", content: formatted }],
-  });
-
-  const toolUse = response.content.find(
-    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
-  );
-  const input = toolUse?.input as { trades?: ExtractedTradeInput[] } | undefined;
-  const extracted = input?.trades ?? [];
-
-  return extracted
-    .filter((t) => rawById.has(t.source_message_id))
-    .map((t) => ({
-      sourceMessageId: t.source_message_id,
-      date: t.date,
-      summary: t.summary,
-      raw: rawById.get(t.source_message_id)!,
-      transfers: t.transfers.map(
-        (tr): TradeTransfer => ({
-          type: tr.type,
-          playerName: tr.player_name,
-          pickYear: tr.pick_year,
-          pickRound: tr.pick_round,
-          from: tr.from_manager,
-          to: tr.to_manager,
-        })
-      ),
-    }));
-}
-
 interface SyncState {
   live_after_id: string | null;
   backfill_before_id: string | null;
   backfill_done: boolean;
 }
 
+/**
+ * Archives raw messages from the trade-announcements GroupMe group into
+ * trade_messages. No LLM parsing happens here — turning a batch of raw
+ * messages into structured rows in the `trades` table is a manual/on-request
+ * step, not something the deployed app pays for on a schedule.
+ */
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -214,7 +95,6 @@ export async function GET(request: Request) {
     }
 
     const allNew = [...backfillMessages, ...liveMessages];
-    let tradesFound = 0;
 
     if (allNew.length > 0) {
       const rows = allNew.map((m) => ({
@@ -229,29 +109,6 @@ export async function GET(request: Request) {
           .from("trade_messages")
           .upsert(chunk, { onConflict: "id" });
         if (error) throw new Error(`Supabase insert error: ${error.message}`);
-      }
-
-      const rawById = new Map(allNew.map((m) => [m.id, `${m.name}: ${m.text}`]));
-      const allTrades: Trade[] = [];
-      for (let i = 0; i < allNew.length; i += EXTRACTION_BATCH_SIZE) {
-        const batch = allNew.slice(i, i + EXTRACTION_BATCH_SIZE);
-        const trades = await extractTrades(batch, rawById);
-        allTrades.push(...trades);
-      }
-
-      if (allTrades.length > 0) {
-        const tradeRows = allTrades.map((t) => ({
-          source_message_id: t.sourceMessageId,
-          traded_at: t.date,
-          summary: t.summary,
-          raw: t.raw,
-          transfers: t.transfers,
-        }));
-        const { error } = await supabase
-          .from("trades")
-          .upsert(tradeRows, { onConflict: "source_message_id" });
-        if (error) throw new Error(`Supabase trades upsert error: ${error.message}`);
-        tradesFound = allTrades.length;
       }
     }
 
@@ -272,7 +129,6 @@ export async function GET(request: Request) {
       liveCaughtUp: liveMessages.length,
       backfillProcessed: backfillMessages.length,
       backfillDone,
-      tradesFound,
     });
   } catch (error) {
     console.error("Trades sync error:", error);
