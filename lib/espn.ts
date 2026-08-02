@@ -1,6 +1,7 @@
 import { type TeamRawStats, type ScheduleEntry, type ScheduleData } from "./data";
 
 const ESPN_API_BASE = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/seasons/2026/segments/0/leagues";
+const ESPN_API_ROOT = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/seasons";
 
 // ESPN stat ID -> our stat name mapping
 const HITTING_STAT_MAP: Record<string, keyof TeamRawStats> = {
@@ -300,4 +301,88 @@ export async function fetchDailyDetails(): Promise<TeamDailyDetails[]> {
   }
 
   return results;
+}
+
+export interface ESPNTradeTransaction {
+  id: string;
+  processDate: number; // unix ms
+  teamNames: string[]; // managers on either side of the trade
+  items: { playerName: string; fromTeam: string | null; toTeam: string | null }[];
+}
+
+/**
+ * Fetch executed trade transactions for a given ESPN season. Best-effort:
+ * player names are resolved from that season's roster snapshot, so a player
+ * traded and later dropped by every team before season end may only resolve
+ * to "Player #<id>" — good enough for a human reviewer to cross-check against
+ * the GroupMe announcement text, not meant to be authoritative on its own.
+ * Returns [] (rather than throwing) if the league has no data for that
+ * season or the fetch otherwise fails, so callers can probe multiple seasons.
+ */
+export async function fetchTradeTransactions(season: number): Promise<ESPNTradeTransaction[]> {
+  const leagueId = process.env.ESPN_LEAGUE_ID;
+  const espnS2 = process.env.ESPN_S2;
+  const swid = process.env.ESPN_SWID;
+  if (!leagueId || !espnS2 || !swid) throw new Error("Missing ESPN environment variables");
+
+  const cookieHeader = `espn_s2=${espnS2}; SWID=${swid}`;
+  const base = `${ESPN_API_ROOT}/${season}/segments/0/leagues/${leagueId}`;
+
+  const [teamRes, txRes] = await Promise.all([
+    fetch(`${base}?view=mTeam&view=mRoster`, { headers: { Cookie: cookieHeader }, cache: "no-store" }),
+    fetch(`${base}?view=mTransactions2`, { headers: { Cookie: cookieHeader }, cache: "no-store" }),
+  ]);
+  if (!teamRes.ok || !txRes.ok) return [];
+
+  const teamData = await teamRes.json();
+  const txData = await txRes.json();
+
+  const memberNames: Record<string, string> = { ...OWNER_NAMES };
+  for (const m of teamData.members ?? []) {
+    memberNames[m.id] = `${m.firstName} ${m.lastName}`;
+  }
+
+  const teamNameById: Record<number, string> = {};
+  const playerNameById: Record<number, string> = {};
+  for (const t of teamData.teams ?? []) {
+    teamNameById[t.id] = memberNames[t.primaryOwner] ?? t.abbrev;
+    for (const entry of t.roster?.entries ?? []) {
+      const player = entry.playerPoolEntry?.player;
+      if (player?.id != null && player?.fullName) playerNameById[player.id] = player.fullName;
+    }
+  }
+
+  const allTransactions: unknown[] = Array.isArray(txData.transactions) ? txData.transactions : [];
+  const trades = allTransactions.filter(
+    (t): t is Record<string, unknown> =>
+      !!t &&
+      typeof t === "object" &&
+      typeof (t as Record<string, unknown>).type === "string" &&
+      ((t as Record<string, unknown>).type as string).includes("TRADE") &&
+      (t as Record<string, unknown>).status === "EXECUTED"
+  );
+
+  return trades.map((t) => {
+    const items = (Array.isArray(t.items) ? t.items : []) as Record<string, unknown>[];
+    const teamIds = new Set<number>();
+    for (const it of items) {
+      if (typeof it.fromTeamId === "number") teamIds.add(it.fromTeamId);
+      if (typeof it.toTeamId === "number") teamIds.add(it.toTeamId);
+    }
+    return {
+      id: String(t.id),
+      processDate: Number(t.processDate ?? t.proposedDate ?? 0),
+      teamNames: [...teamIds].map((id) => teamNameById[id] ?? `Team ${id}`),
+      items: items.map((it) => {
+        const playerId = it.playerId as number | undefined;
+        const fromTeamId = it.fromTeamId as number | undefined;
+        const toTeamId = it.toTeamId as number | undefined;
+        return {
+          playerName: playerId != null ? playerNameById[playerId] ?? `Player #${playerId}` : "Unknown player",
+          fromTeam: fromTeamId != null ? teamNameById[fromTeamId] ?? `Team ${fromTeamId}` : null,
+          toTeam: toTeamId != null ? teamNameById[toTeamId] ?? `Team ${toTeamId}` : null,
+        };
+      }),
+    };
+  });
 }
