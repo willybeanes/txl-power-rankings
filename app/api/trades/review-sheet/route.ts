@@ -1,6 +1,22 @@
 import { getSupabase } from "@/lib/supabase";
 import { fetchTradeActivity, type ESPNTradeActivity } from "@/lib/espn";
 
+// TEMP DEBUG — remove after checking DROP transaction shape
+async function debugDropShape(season: number) {
+  const leagueId = process.env.ESPN_LEAGUE_ID;
+  const espnS2 = process.env.ESPN_S2;
+  const swid = process.env.ESPN_SWID;
+  const base = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/seasons/${season}/segments/0/leagues/${leagueId}`;
+  const res = await fetch(`${base}?view=mTransactions2`, {
+    headers: { Cookie: `espn_s2=${espnS2}; SWID=${swid}` },
+    cache: "no-store",
+  });
+  const data = await res.json();
+  const all = Array.isArray(data.transactions) ? data.transactions : [];
+  const nonTrade = all.filter((t: Record<string, unknown>) => typeof t.type === "string" && !t.type.includes("TRADE"));
+  return { total: all.length, nonTradeCount: nonTrade.length, sample: nonTrade.slice(0, 5) };
+}
+
 /** How far apart a GroupMe announcement and an ESPN trade action can be and still be considered a match. */
 const MATCH_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -118,6 +134,11 @@ export async function GET(request: Request) {
   const secret = new URL(request.url).searchParams.get("secret");
   if (secret !== process.env.CRON_SECRET) {
     return new Response("Unauthorized", { status: 401 });
+  }
+
+  if (new URL(request.url).searchParams.get("debug") === "drops") {
+    const season = Number(new URL(request.url).searchParams.get("season") ?? "2026");
+    return Response.json(await debugDropShape(season));
   }
 
   try {
