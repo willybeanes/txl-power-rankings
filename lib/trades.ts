@@ -121,5 +121,11 @@ export function computePickLedger(trades: Trade[]): ManagerPickSummary[] {
     }
   }
 
+  const byYearThenRound = (a: PickMovement, b: PickMovement) => a.year - b.year || a.round - b.round;
+  for (const s of summaries.values()) {
+    s.acquired.sort(byYearThenRound);
+    s.given.sort(byYearThenRound);
+  }
+
   return [...summaries.values()].sort((a, b) => a.manager.localeCompare(b.manager));
 }
