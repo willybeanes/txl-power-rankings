@@ -3,10 +3,12 @@
 import { useState, useEffect, useMemo } from "react";
 import { type TeamScored } from "@/lib/data";
 import { DRAFT_PICKS, DRAFT_MANAGERS, type DraftPick } from "@/lib/draft";
+import { computePickLedger, type Trade } from "@/lib/trades";
 
 type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore" | "era" | "moves" | "ops" | "playoffPct";
 type SortDir = "asc" | "desc";
-type Tab = "standings" | "graphs" | "draft" | "props" | "players";
+type Tab = "standings" | "graphs" | "draft" | "props" | "players" | "transactions";
+type TransactionsSubTab = "trades" | "teams";
 
 type TradeSeriesPoint = { date: string; murakami: number; pasquantino: number };
 
@@ -1379,6 +1381,170 @@ function DraftBoard() {
   );
 }
 
+function managerShortName(fullName: string): string {
+  return DRAFT_MANAGERS.find((m) => m.fullName === fullName)?.short ?? fullName;
+}
+
+function TradesList({ trades }: { trades: Trade[] }) {
+  if (trades.length === 0) {
+    return <p className="text-text-muted text-sm">No trades recorded yet.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {trades.map((trade) => {
+        const byRecipient = new Map<string, string[]>();
+        for (const t of trade.transfers) {
+          const label =
+            t.type === "player" ? t.playerName ?? "Unknown player" : `${t.pickYear} Round ${t.pickRound} pick`;
+          const list = byRecipient.get(t.to) ?? [];
+          list.push(label);
+          byRecipient.set(t.to, list);
+        }
+
+        return (
+          <div key={trade.sourceMessageId} className="rounded-[14px] bg-surface border border-border p-4">
+            <div className="flex items-center justify-between mb-3 gap-3">
+              <p className="text-sm font-semibold text-text-primary">{trade.summary}</p>
+              <span className="text-xs text-text-muted whitespace-nowrap">
+                {new Date(`${trade.date}T00:00:00`).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[...byRecipient.entries()].map(([manager, assets]) => (
+                <div key={manager} className="rounded-lg bg-surface-2/50 p-3">
+                  <p className="text-xs font-semibold text-text-secondary mb-1">
+                    {managerShortName(manager)} receives
+                  </p>
+                  <ul className="text-xs text-text-muted space-y-0.5">
+                    {assets.map((a, i) => (
+                      <li key={i}>{a}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TeamsPickLedger({ trades }: { trades: Trade[] }) {
+  const ledger = useMemo(() => computePickLedger(trades), [trades]);
+  const byManager = new Map(ledger.map((s) => [s.manager, s]));
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {DRAFT_MANAGERS.map(({ fullName, short }) => {
+        const summary = byManager.get(fullName);
+        const acquired = summary?.acquired ?? [];
+        const given = summary?.given ?? [];
+        const net = acquired.length - given.length;
+
+        return (
+          <div key={fullName} className="rounded-[14px] bg-surface border border-border p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-text-primary">{short}</p>
+              {net !== 0 && (
+                <span className={`text-xs font-semibold ${net > 0 ? "text-green" : "text-brand-red"}`}>
+                  {net > 0 ? `+${net}` : net}
+                </span>
+              )}
+            </div>
+            {acquired.length === 0 && given.length === 0 ? (
+              <p className="text-xs text-text-muted">No picks traded</p>
+            ) : (
+              <div className="space-y-2">
+                {acquired.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-green mb-1">Acquired</p>
+                    <ul className="text-xs text-text-secondary space-y-0.5">
+                      {acquired.map((p, i) => (
+                        <li key={i}>
+                          {p.year} R{p.round} <span className="text-text-muted">(from {managerShortName(p.otherManager)})</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {given.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-brand-red mb-1">Given up</p>
+                    <ul className="text-xs text-text-secondary space-y-0.5">
+                      {given.map((p, i) => (
+                        <li key={i}>
+                          {p.year} R{p.round} <span className="text-text-muted">(to {managerShortName(p.otherManager)})</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TransactionsTab() {
+  const [subTab, setSubTab] = useState<TransactionsSubTab>("trades");
+  const [trades, setTrades] = useState<Trade[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/trades")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        setTrades(data.trades ?? []);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load trades"));
+  }, []);
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-base font-bold text-text-primary">Transactions</h2>
+        <p className="text-text-muted text-xs mt-0.5">Trades since 2024, and future pick ownership</p>
+      </div>
+
+      <div className="flex gap-4 mb-6 border-b border-border">
+        {(["trades", "teams"] as TransactionsSubTab[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setSubTab(t)}
+            className={`pb-2 text-sm font-semibold capitalize border-b-2 -mb-px transition-colors ${
+              subTab === t
+                ? "border-brand-red text-brand-red"
+                : "border-transparent text-text-muted hover:text-text-secondary"
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {error ? (
+        <p className="text-brand-red text-sm">{error}</p>
+      ) : trades === null ? (
+        <LoadingSkeleton />
+      ) : subTab === "trades" ? (
+        <TradesList trades={trades} />
+      ) : (
+        <TeamsPickLedger trades={trades} />
+      )}
+    </div>
+  );
+}
+
 function LoadingSkeleton() {
   return (
     <div className="animate-pulse space-y-4">
@@ -1411,7 +1577,7 @@ export default function Home() {
   // Sync tab with URL (?tab=standings|graphs|draft)
   useEffect(() => {
     const param = new URLSearchParams(window.location.search).get("tab");
-    if (param === "standings" || param === "graphs" || param === "draft" || param === "props" || param === "players") {
+    if (param === "standings" || param === "graphs" || param === "draft" || param === "props" || param === "players" || param === "transactions") {
       setActiveTab(param);
     }
   }, []);
@@ -1539,7 +1705,7 @@ export default function Home() {
             <p className="text-text-secondary mt-0.5 text-sm">2026 Season</p>
           </div>
           <div className="flex gap-6 mt-3">
-            {(["standings", "graphs", "draft", "props", "players"] as Tab[]).map((tab) => (
+            {(["standings", "graphs", "draft", "props", "players", "transactions"] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setTab(tab)}
@@ -1557,7 +1723,9 @@ export default function Home() {
       </div>
 
       <div className={`mx-auto pt-6 pb-8 ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"}`}>
-        {activeTab === "players" ? (
+        {activeTab === "transactions" ? (
+          <TransactionsTab />
+        ) : activeTab === "players" ? (
           <div>
             <div className="mb-6">
               <h2 className="text-base font-bold text-text-primary">Player Leaderboard</h2>
