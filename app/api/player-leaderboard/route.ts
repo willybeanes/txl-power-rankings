@@ -102,6 +102,7 @@ export async function GET(request: Request) {
   }
 
   const players: PlayerEntry[] = [];
+  const debugRows: { name: string; manager: string; draftedBy: string | null; espnAcquisitionType: string | null }[] = [];
 
   for (const team of data.teams ?? []) {
     const manager = memberNames[team.primaryOwner] ?? team.abbrev;
@@ -111,7 +112,14 @@ export async function GET(request: Request) {
       const player = entry.playerPoolEntry?.player;
       if (!player) continue;
 
-      if (debugName && player.fullName === debugName) {
+      if (debugName === "__DISTRIBUTION__") {
+        debugRows.push({
+          name: player.fullName,
+          manager,
+          draftedBy: draftManagerByName[player.fullName] ?? null,
+          espnAcquisitionType: entry.acquisitionType ?? null,
+        });
+      } else if (debugName && player.fullName === debugName) {
         return NextResponse.json({ manager, draftedBy: draftManagerByName[player.fullName], entryKeys: Object.keys(entry), entry });
       }
 
@@ -169,6 +177,16 @@ export async function GET(request: Request) {
         acquisitionType,
       });
     }
+  }
+
+  if (debugName === "__DISTRIBUTION__") {
+    const espnTypeCounts: Record<string, number> = {};
+    const mismatches = debugRows.filter((r) => r.draftedBy === r.manager && r.espnAcquisitionType !== "DRAFT");
+    for (const r of debugRows) {
+      const k = r.espnAcquisitionType ?? "null";
+      espnTypeCounts[k] = (espnTypeCounts[k] ?? 0) + 1;
+    }
+    return NextResponse.json({ totalRows: debugRows.length, espnTypeCounts, mismatchCount: mismatches.length, mismatches });
   }
 
   // Sort all players by TXL score descending
