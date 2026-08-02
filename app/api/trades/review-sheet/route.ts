@@ -1,7 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
-import { fetchTradeTransactions, type ESPNTradeTransaction } from "@/lib/espn";
+import { fetchTradeActivity, type ESPNTradeActivity } from "@/lib/espn";
 
-/** How far apart a GroupMe announcement and an ESPN trade transaction can be and still be considered a match. */
+/** How far apart a GroupMe announcement and an ESPN trade action can be and still be considered a match. */
 const MATCH_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 
 /** ESPN league history is only queried for these seasons. */
@@ -74,56 +74,20 @@ export async function GET(request: Request) {
       (m) => !alreadyStructured.has(m.id) && m.text && m.text.trim().length > 0
     );
 
-    const espnResults = await Promise.allSettled(SEASONS.map((s) => fetchTradeTransactions(s)));
-    const espnTrades: ESPNTradeTransaction[] = espnResults.flatMap((r) =>
+    const espnResults = await Promise.allSettled(SEASONS.map((s) => fetchTradeActivity(s)));
+    const espnActivity: ESPNTradeActivity[] = espnResults.flatMap((r) =>
       r.status === "fulfilled" ? r.value : []
     );
     const espnFetchErrors = espnResults
       .map((r, i) => (r.status === "rejected" ? `${SEASONS[i]}: ${r.reason}` : null))
       .filter((x): x is string => x !== null);
 
-    if (new URL(request.url).searchParams.get("debug") === "1") {
-      return Response.json({
-        pendingMessageCount: pending.length,
-        perSeason: SEASONS.map((s, i) => ({
-          season: s,
-          status: espnResults[i].status,
-          count: espnResults[i].status === "fulfilled" ? (espnResults[i] as PromiseFulfilledResult<ESPNTradeTransaction[]>).value.length : null,
-          error: espnResults[i].status === "rejected" ? String((espnResults[i] as PromiseRejectedResult).reason) : null,
-        })),
-        sampleTrades: espnTrades.slice(0, 5),
-      });
-    }
-
-    if (new URL(request.url).searchParams.get("debug") === "raw") {
-      const leagueId = process.env.ESPN_LEAGUE_ID;
-      const espnS2 = process.env.ESPN_S2;
-      const swid = process.env.ESPN_SWID;
-      const base = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/seasons/2026/segments/0/leagues/${leagueId}`;
-      const res = await fetch(`${base}?view=mTransactions2`, {
-        headers: { Cookie: `espn_s2=${espnS2}; SWID=${swid}` },
-        cache: "no-store",
-      });
-      const data = await res.json();
-      const all = Array.isArray(data.transactions) ? data.transactions : [];
-      const trades = all.filter((t: Record<string, unknown>) => typeof t.type === "string" && t.type.includes("TRADE"));
-      const byId = new Map(all.map((t: Record<string, unknown>) => [t.id, t]));
-      const first = trades[0];
-      const related = first ? byId.get(first.relatedTransactionId) : null;
-      return Response.json({
-        totalTransactions: all.length,
-        allTradeRecords: trades,
-        relatedRecordForFirst: related ?? null,
-      });
-    }
-
     let csv = csvRow([
       "source_message_id",
       "posted_at",
       "sender",
       "raw_text",
-      "espn_teams_involved",
-      "espn_players_moved",
+      "espn_trade_activity_nearby",
       "text_pick_mentions",
       "approved (Y/N)",
       "corrections / notes",
@@ -131,26 +95,11 @@ export async function GET(request: Request) {
 
     for (const m of pending) {
       const postedAt = new Date(m.created_at).getTime();
-      const nearbyTrades = espnTrades.filter((t) => Math.abs(t.processDate - postedAt) <= MATCH_WINDOW_MS);
-
-      const teams = [...new Set(nearbyTrades.flatMap((t) => t.teamNames))].join("; ");
-      const players = nearbyTrades
-        .flatMap((t) => t.items)
-        .map((it) => `${it.playerName}: ${it.fromTeam ?? "?"} -> ${it.toTeam ?? "?"}`)
-        .join("; ");
+      const nearby = espnActivity.filter((t) => Math.abs(t.processDate - postedAt) <= MATCH_WINDOW_MS);
+      const activity = nearby.map((t) => `${t.manager} (${t.type})`).join("; ");
       const pickMentions = findPickMentions(m.text ?? "").join("; ");
 
-      csv += csvRow([
-        m.id,
-        m.created_at,
-        m.sender_name ?? "",
-        m.text ?? "",
-        teams,
-        players,
-        pickMentions,
-        "",
-        "",
-      ]);
+      csv += csvRow([m.id, m.created_at, m.sender_name ?? "", m.text ?? "", activity, pickMentions, "", ""]);
     }
 
     if (espnFetchErrors.length > 0) {
@@ -159,7 +108,6 @@ export async function GET(request: Request) {
         "",
         "",
         `Note: ESPN data unavailable for season(s): ${espnFetchErrors.join(" | ")}`,
-        "",
         "",
         "",
         "",

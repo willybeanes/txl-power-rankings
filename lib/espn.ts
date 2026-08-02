@@ -303,23 +303,29 @@ export async function fetchDailyDetails(): Promise<TeamDailyDetails[]> {
   return results;
 }
 
-export interface ESPNTradeTransaction {
+export interface ESPNTradeActivity {
   id: string;
   processDate: number; // unix ms
-  teamNames: string[]; // managers on either side of the trade
-  items: { playerName: string; fromTeam: string | null; toTeam: string | null }[];
+  type: string; // "TRADE_ACCEPT" | "TRADE_DECLINE" | ...
+  manager: string; // the manager who took this action
 }
 
 /**
- * Fetch executed trade transactions for a given ESPN season. Best-effort:
- * player names are resolved from that season's roster snapshot, so a player
- * traded and later dropped by every team before season end may only resolve
- * to "Player #<id>" — good enough for a human reviewer to cross-check against
- * the GroupMe announcement text, not meant to be authoritative on its own.
- * Returns [] (rather than throwing) if the league has no data for that
- * season or the fetch otherwise fails, so callers can probe multiple seasons.
+ * Fetch executed trade-related transactions for a given ESPN season.
+ *
+ * IMPORTANT LIMITATION (confirmed against this league's real data, not just
+ * documented behavior): ESPN's TRADE_ACCEPT/TRADE_DECLINE records always
+ * have an empty `items` array via this read-only API, and their
+ * `relatedTransactionId` points at a record this endpoint doesn't return —
+ * so which players/picks were actually exchanged is NOT retrievable this
+ * way. This only confirms *that* a manager took a trade action, and when —
+ * useful as a timing/participant hint for cross-referencing against a
+ * GroupMe trade announcement, not as a source of the traded assets
+ * themselves. Returns [] (rather than throwing) if the league has no data
+ * for that season or the fetch otherwise fails, so callers can probe
+ * multiple seasons.
  */
-export async function fetchTradeTransactions(season: number): Promise<ESPNTradeTransaction[]> {
+export async function fetchTradeActivity(season: number): Promise<ESPNTradeActivity[]> {
   const leagueId = process.env.ESPN_LEAGUE_ID;
   const espnS2 = process.env.ESPN_S2;
   const swid = process.env.ESPN_SWID;
@@ -329,7 +335,7 @@ export async function fetchTradeTransactions(season: number): Promise<ESPNTradeT
   const base = `${ESPN_API_ROOT}/${season}/segments/0/leagues/${leagueId}`;
 
   const [teamRes, txRes] = await Promise.all([
-    fetch(`${base}?view=mTeam&view=mRoster`, { headers: { Cookie: cookieHeader }, cache: "no-store" }),
+    fetch(`${base}?view=mTeam`, { headers: { Cookie: cookieHeader }, cache: "no-store" }),
     fetch(`${base}?view=mTransactions2`, { headers: { Cookie: cookieHeader }, cache: "no-store" }),
   ]);
   if (!teamRes.ok || !txRes.ok) return [];
@@ -343,13 +349,8 @@ export async function fetchTradeTransactions(season: number): Promise<ESPNTradeT
   }
 
   const teamNameById: Record<number, string> = {};
-  const playerNameById: Record<number, string> = {};
   for (const t of teamData.teams ?? []) {
     teamNameById[t.id] = memberNames[t.primaryOwner] ?? t.abbrev;
-    for (const entry of t.roster?.entries ?? []) {
-      const player = entry.playerPoolEntry?.player;
-      if (player?.id != null && player?.fullName) playerNameById[player.id] = player.fullName;
-    }
   }
 
   const allTransactions: unknown[] = Array.isArray(txData.transactions) ? txData.transactions : [];
@@ -363,26 +364,17 @@ export async function fetchTradeTransactions(season: number): Promise<ESPNTradeT
   );
 
   return trades.map((t) => {
-    const items = (Array.isArray(t.items) ? t.items : []) as Record<string, unknown>[];
-    const teamIds = new Set<number>();
-    for (const it of items) {
-      if (typeof it.fromTeamId === "number") teamIds.add(it.fromTeamId);
-      if (typeof it.toTeamId === "number") teamIds.add(it.toTeamId);
-    }
+    const memberId = t.memberId as string | undefined;
+    const teamId = t.teamId as number | undefined;
+    const manager =
+      (memberId != null ? memberNames[memberId] : undefined) ??
+      (teamId != null ? teamNameById[teamId] : undefined) ??
+      "Unknown manager";
     return {
       id: String(t.id),
       processDate: Number(t.processDate ?? t.proposedDate ?? 0),
-      teamNames: [...teamIds].map((id) => teamNameById[id] ?? `Team ${id}`),
-      items: items.map((it) => {
-        const playerId = it.playerId as number | undefined;
-        const fromTeamId = it.fromTeamId as number | undefined;
-        const toTeamId = it.toTeamId as number | undefined;
-        return {
-          playerName: playerId != null ? playerNameById[playerId] ?? `Player #${playerId}` : "Unknown player",
-          fromTeam: fromTeamId != null ? teamNameById[fromTeamId] ?? `Team ${fromTeamId}` : null,
-          toTeam: toTeamId != null ? teamNameById[toTeamId] ?? `Team ${toTeamId}` : null,
-        };
-      }),
+      type: String(t.type),
+      manager,
     };
   });
 }
