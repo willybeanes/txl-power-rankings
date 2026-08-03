@@ -1519,6 +1519,9 @@ function TransactionsTab() {
 
   return (
     <div>
+      <p className="text-brand-red text-sm font-semibold mb-4">
+        The trade deadline passed last night at 11pm CST.
+      </p>
       <div className="mb-6">
         <h2 className="text-base font-bold text-text-primary">Transactions</h2>
         <p className="text-text-muted text-xs mt-0.5">Trades since 2025, with future pick ownership consideration</p>
