@@ -3,10 +3,6 @@
   "buildCommand": "bun run build",
   "crons": [
     {
-      "path": "/api/cron/snapshot",
-      "schedule": "55 4 * * *"
-    },
-    {
       "path": "/api/cron/groupme-sync",
       "schedule": "30 5 * * *"
     },
