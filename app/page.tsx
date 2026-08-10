@@ -885,7 +885,14 @@ function PropRankedList({
               className="w-8 h-8 rounded-full object-cover border border-border flex-shrink-0" />
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-text-primary truncate">{t.team}</p>
+            <p className="text-sm font-semibold text-text-primary truncate">
+              {t.team}
+              {i === 0 && (
+                <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-amber bg-amber/15 px-1.5 py-0.5 rounded-full align-middle">
+                  Winner
+                </span>
+              )}
+            </p>
             <p className="text-xs text-text-muted truncate">{t.manager}</p>
           </div>
           <span className="text-sm font-bold tabular-nums text-text-primary flex-shrink-0">
@@ -974,7 +981,14 @@ function PropsTab() {
                     className="w-9 h-9 rounded-full object-cover border border-border flex-shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-text-primary truncate">{w.team}</p>
+                  <p className="text-sm font-semibold text-text-primary truncate">
+                    {w.team}
+                    {i === 0 && (
+                      <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-amber bg-amber/15 px-1.5 py-0.5 rounded-full align-middle">
+                        Winner
+                      </span>
+                    )}
+                  </p>
                   <p className="text-xs text-text-muted">Week {w.week} · {w.manager}</p>
                 </div>
                 <span className="text-sm font-bold tabular-nums text-text-primary flex-shrink-0">
@@ -1005,7 +1019,12 @@ function PropsTab() {
               className="w-10 h-10 rounded-full object-cover border-2 border-brand-red/40 flex-shrink-0" />
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-text-primary truncate">{badLuckWinner.team}</p>
+            <p className="text-sm font-bold text-text-primary truncate">
+              {badLuckWinner.team}
+              <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-brand-red bg-brand-red/15 px-1.5 py-0.5 rounded-full align-middle">
+                Winner
+              </span>
+            </p>
             <p className="text-xs text-text-muted">{badLuckWinner.manager} · {badLuckWinner.record}</p>
           </div>
           <div className="text-right flex-shrink-0">
