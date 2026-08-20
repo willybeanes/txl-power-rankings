@@ -7,7 +7,7 @@ import { computePickLedger, type Trade } from "@/lib/trades";
 
 type SortKey = "rank" | "team" | "hittingScore" | "pitchingScore" | "totalScore" | "era" | "moves" | "ops" | "playoffPct";
 type SortDir = "asc" | "desc";
-type Tab = "standings" | "graphs" | "draft" | "props" | "players" | "transactions";
+type Tab = "standings" | "graphs" | "draft" | "props" | "players" | "transactions" | "keepers";
 type TransactionsSubTab = "trades" | "teams";
 
 type TradeSeriesPoint = { date: string; murakami: number; pasquantino: number };
@@ -1521,6 +1521,85 @@ function TeamsPickLedger({ trades }: { trades: Trade[] }) {
   );
 }
 
+// ─── Keepers Tab ─────────────────────────────────────────────────────────────
+
+interface KeeperPlayer {
+  name: string;
+  position: string;
+  type: "hitter" | "pitcher";
+  txlScore: number;
+  draftRound: number | null;
+  keeper: boolean;
+  acquisitionType: "DRAFT" | "ADD" | "TRADE";
+}
+
+interface KeeperTeam {
+  teamName: string;
+  manager: string;
+  players: KeeperPlayer[];
+}
+
+function AcqBadge({ type }: { type: "DRAFT" | "ADD" | "TRADE" }) {
+  const styles: Record<string, string> = {
+    DRAFT: "bg-amber/10 text-amber",
+    ADD: "bg-green/10 text-green",
+    TRADE: "bg-blue/10 text-blue",
+  };
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${styles[type]}`}>
+      {type}
+    </span>
+  );
+}
+
+function KeepersTab() {
+  const [teams, setTeams] = useState<KeeperTeam[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/keeper-roster")
+      .then((res) => res.json())
+      .then((d) => {
+        if (d.error) throw new Error(d.error);
+        setTeams(d.teams ?? []);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"));
+  }, []);
+
+  if (error) return <p className="text-brand-red text-sm">{error}</p>;
+  if (!teams) return <LoadingSkeleton />;
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {teams.map((team) => (
+        <div key={team.manager} className="rounded-[14px] border border-border bg-surface p-4">
+          <div className="mb-3">
+            <h3 className="font-bold text-text-primary text-sm">{team.teamName}</h3>
+            <p className="text-text-muted text-xs">{team.manager}</p>
+          </div>
+          <div className="space-y-1.5">
+            {team.players.map((p) => (
+              <div key={p.name} className="flex items-center gap-2 py-1 border-b border-border/40 last:border-0">
+                <span className="text-[10px] font-semibold text-text-muted w-8 flex-shrink-0">{p.position}</span>
+                <span className="text-xs text-text-primary flex-1 min-w-0 truncate">{p.name}</span>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {p.draftRound && (
+                    <span className="text-[10px] text-text-muted tabular-nums">R{p.draftRound}</span>
+                  )}
+                  <AcqBadge type={p.acquisitionType} />
+                  <span className="text-xs tabular-nums font-semibold text-text-primary w-10 text-right">
+                    {p.txlScore}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TransactionsTab() {
   const [subTab, setSubTab] = useState<TransactionsSubTab>("trades");
   const [trades, setTrades] = useState<Trade[] | null>(null);
@@ -1619,7 +1698,7 @@ export default function Home() {
   // Sync tab with URL (?tab=standings|graphs|draft)
   useEffect(() => {
     const param = new URLSearchParams(window.location.search).get("tab");
-    if (param === "standings" || param === "graphs" || param === "draft" || param === "props" || param === "players" || param === "transactions") {
+    if (param === "standings" || param === "graphs" || param === "draft" || param === "props" || param === "players" || param === "transactions" || param === "keepers") {
       setActiveTab(param);
     }
   }, []);
@@ -1747,7 +1826,7 @@ export default function Home() {
             <p className="text-text-secondary mt-0.5 text-sm">2026 Season</p>
           </div>
           <div className="flex gap-6 mt-3">
-            {(["standings", "graphs", "draft", "props", "players", "transactions"] as Tab[]).map((tab) => (
+            {(["standings", "graphs", "draft", "props", "players", "transactions", "keepers"] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setTab(tab)}
@@ -1757,7 +1836,7 @@ export default function Home() {
                     : "border-transparent text-text-muted hover:text-text-secondary"
                 }`}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab === "keepers" ? "2027 Keepers" : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </div>
@@ -1765,7 +1844,17 @@ export default function Home() {
       </div>
 
       <div className={`mx-auto pt-6 pb-8 ${activeTab === "draft" ? "max-w-[1600px]" : "max-w-5xl"}`}>
-        {activeTab === "transactions" ? (
+        {activeTab === "keepers" ? (
+          <div>
+            <div className="mb-6">
+              <h2 className="text-base font-bold text-text-primary">2027 Keeper Roster</h2>
+              <p className="text-text-muted text-xs mt-0.5">
+                Every team&apos;s roster as of August 9 (lock date) · season TXL score shown for reference
+              </p>
+            </div>
+            <KeepersTab />
+          </div>
+        ) : activeTab === "transactions" ? (
           <TransactionsTab />
         ) : activeTab === "players" ? (
           <div>
