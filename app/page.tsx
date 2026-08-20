@@ -1531,6 +1531,7 @@ interface KeeperPlayer {
   draftRound: number | null;
   keeper: boolean;
   acquisitionType: "DRAFT" | "ADD" | "TRADE";
+  keeperRound2027: number | "FA";
 }
 
 interface KeeperTeam {
@@ -1583,11 +1584,15 @@ function KeepersTab() {
                 <span className="text-[10px] font-semibold text-text-muted w-8 flex-shrink-0">{p.position}</span>
                 <span className="text-xs text-text-primary flex-1 min-w-0 truncate">{p.name}</span>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  {p.draftRound && (
-                    <span className="text-[10px] text-text-muted tabular-nums">R{p.draftRound}</span>
-                  )}
                   <AcqBadge type={p.acquisitionType} />
-                  <span className="text-xs tabular-nums font-semibold text-text-primary w-10 text-right">
+                  {p.keeperRound2027 === "FA" ? (
+                    <span className="text-[10px] font-semibold text-text-muted tabular-nums w-10 text-right">FA</span>
+                  ) : (
+                    <span className="text-[10px] font-semibold text-amber tabular-nums w-10 text-right">
+                      Rd {p.keeperRound2027}
+                    </span>
+                  )}
+                  <span className="text-xs tabular-nums text-text-secondary w-10 text-right">
                     {p.txlScore}
                   </span>
                 </div>

@@ -37,6 +37,7 @@ export interface KeeperPlayer {
   draftRound: number | null;
   keeper: boolean;
   acquisitionType: "DRAFT" | "ADD" | "TRADE";
+  keeperRound2027: number | "FA";
 }
 
 export interface KeeperTeam {
@@ -85,7 +86,8 @@ export async function GET() {
     const players: KeeperPlayer[] = [];
 
     for (const entry of team.roster?.entries ?? []) {
-      const player = entry.playerPoolEntry?.player;
+      const ppe = entry.playerPoolEntry;
+      const player = ppe?.player;
       if (!player) continue;
 
       const draftedBy = draftManagerByName[player.fullName];
@@ -97,6 +99,14 @@ export async function GET() {
           : entry.acquisitionType === "TRADE"
           ? "TRADE"
           : "ADD";
+
+      // keeperValueFuture === 0 means the player was dropped at some point this season
+      // (ESPN tracks this internally). This catches ADD players AND "dropped then traded" players.
+      const wasEverDropped = !ppe.keeperValueFuture;
+      const draftRound = draftRoundByName[player.fullName] ?? null;
+      const keeperRound2027: number | "FA" = wasEverDropped || draftRound === null
+        ? "FA"
+        : Math.max(1, draftRound - 3);
 
       const positionId: number = player.defaultPositionId ?? 0;
       const isPitcher = PITCHER_POSITION_IDS.has(positionId);
@@ -124,9 +134,10 @@ export async function GET() {
         position: displayPosition,
         type,
         txlScore: Math.round(txlScore),
-        draftRound: draftRoundByName[player.fullName] ?? null,
+        draftRound,
         keeper: keeperNames.has(player.fullName),
         acquisitionType,
+        keeperRound2027,
       });
     }
 
