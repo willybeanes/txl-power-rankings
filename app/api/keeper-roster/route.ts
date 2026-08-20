@@ -74,11 +74,11 @@ export async function GET() {
 
   const [data, liveData] = await Promise.all([res.json(), liveRes.json()]);
 
-  // Build playerId → acquisitionType from live roster
+  // Build playerId → acquisitionType from live roster (field is player.id, not player.playerId)
   const liveAcqByPlayerId: Record<number, string> = {};
   for (const team of liveData.teams ?? []) {
     for (const entry of team.roster?.entries ?? []) {
-      const pid: number = entry.playerPoolEntry?.player?.playerId;
+      const pid: number = entry.playerPoolEntry?.player?.id;
       if (pid && entry.acquisitionType) liveAcqByPlayerId[pid] = entry.acquisitionType;
     }
   }
@@ -110,7 +110,7 @@ export async function GET() {
       if (!player) continue;
 
       const draftedBy = draftManagerByName[player.fullName];
-      const liveAcq = liveAcqByPlayerId[player.playerId];
+      const liveAcq = liveAcqByPlayerId[player.id];
       const acquisitionType: "DRAFT" | "ADD" | "TRADE" =
         liveAcq === "ADD"
           ? "ADD"
