@@ -56,13 +56,32 @@ export async function GET() {
 
   const cookie = `espn_s2=${espnS2}; SWID=${swid}`;
 
-  const res = await fetch(
-    `${ESPN_API_BASE}/${leagueId}?view=mRoster&view=mTeam&scoringPeriodId=${ROSTER_LOCK_SCORING_PERIOD}`,
-    { headers: { Cookie: cookie }, next: { revalidate: 3600 } }
-  );
+  // Fetch historical roster (Aug 9) and current live roster in parallel.
+  // The historical roster tells us who was on each team at the lock date;
+  // the live roster has the accurate acquisitionType (DRAFT/ADD/TRADE) which
+  // ESPN doesn't populate on historical entries.
+  const [res, liveRes] = await Promise.all([
+    fetch(
+      `${ESPN_API_BASE}/${leagueId}?view=mRoster&view=mTeam&scoringPeriodId=${ROSTER_LOCK_SCORING_PERIOD}`,
+      { headers: { Cookie: cookie }, next: { revalidate: 3600 } }
+    ),
+    fetch(
+      `${ESPN_API_BASE}/${leagueId}?view=mRoster`,
+      { headers: { Cookie: cookie }, next: { revalidate: 3600 } }
+    ),
+  ]);
   if (!res.ok) return NextResponse.json({ error: `ESPN error ${res.status}` }, { status: 502 });
 
-  const data = await res.json();
+  const [data, liveData] = await Promise.all([res.json(), liveRes.json()]);
+
+  // Build playerId → acquisitionType from live roster
+  const liveAcqByPlayerId: Record<number, string> = {};
+  for (const team of liveData.teams ?? []) {
+    for (const entry of team.roster?.entries ?? []) {
+      const pid: number = entry.playerPoolEntry?.player?.playerId;
+      if (pid && entry.acquisitionType) liveAcqByPlayerId[pid] = entry.acquisitionType;
+    }
+  }
 
   const draftRoundByName: Record<string, number> = {};
   const keeperNames = new Set<string>();
@@ -91,12 +110,13 @@ export async function GET() {
       if (!player) continue;
 
       const draftedBy = draftManagerByName[player.fullName];
+      const liveAcq = liveAcqByPlayerId[player.playerId];
       const acquisitionType: "DRAFT" | "ADD" | "TRADE" =
-        entry.acquisitionType === "ADD"
+        liveAcq === "ADD"
           ? "ADD"
           : draftedBy && draftedBy === manager
           ? "DRAFT"
-          : entry.acquisitionType === "TRADE"
+          : liveAcq === "TRADE"
           ? "TRADE"
           : "ADD";
 
