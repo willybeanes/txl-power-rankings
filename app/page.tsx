@@ -1584,6 +1584,11 @@ function KeepersTab() {
                 <span className="text-[10px] font-semibold text-text-muted w-8 flex-shrink-0">{p.position}</span>
                 <span className="text-xs text-text-primary flex-1 min-w-0 truncate">{p.name}</span>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {p.keeper && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand-red/10 text-brand-red">
+                      KEPT
+                    </span>
+                  )}
                   <AcqBadge type={p.acquisitionType} />
                   {p.keeperRound2027 === "FA" ? (
                     <span className="text-[10px] font-semibold text-text-muted tabular-nums w-10 text-right">FA</span>
