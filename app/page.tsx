@@ -1578,7 +1578,17 @@ function KeepersTab() {
             <h3 className="font-bold text-text-primary text-sm">{team.teamName}</h3>
             <p className="text-text-muted text-xs">{team.manager}</p>
           </div>
-          <div className="space-y-1.5">
+          <div>
+            {/* Column headers */}
+            <div className="flex items-center gap-2 pb-1.5 mb-1 border-b border-border">
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-text-muted w-8 flex-shrink-0">Pos</span>
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-text-muted flex-1 min-w-0">Player</span>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-text-muted w-[52px] text-right">Type</span>
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-amber w-10 text-right">2028 KR</span>
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-text-muted w-10 text-right">TXL</span>
+              </div>
+            </div>
             {team.players.map((p) => (
               <div key={p.name} className="flex items-center gap-2 py-1 border-b border-border/40 last:border-0">
                 <span className="text-[10px] font-semibold text-text-muted w-8 flex-shrink-0">{p.position}</span>
@@ -1860,6 +1870,9 @@ export default function Home() {
               <h2 className="text-base font-bold text-text-primary">2027 Keeper Roster</h2>
               <p className="text-text-muted text-xs mt-0.5">
                 Every team&apos;s roster as of August 9 (lock date) · season TXL score shown for reference
+              </p>
+              <p className="text-text-muted text-xs mt-1">
+                <span className="font-semibold text-amber">2028 KR</span> = the draft round it costs to keep this player into the 2028 season (3 rounds earlier than their acquisition round) · <span className="font-semibold text-text-muted">FA</span> = free agent cost (player was added off waivers or dropped during the season)
               </p>
             </div>
             <KeepersTab />
