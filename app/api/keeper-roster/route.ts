@@ -74,12 +74,23 @@ export async function GET() {
 
   const [data, liveData] = await Promise.all([res.json(), liveRes.json()]);
 
-  // Build playerId → acquisitionType from live roster (field is player.id, not player.playerId)
+  // Build playerId → acquisitionType and keeperValueFuture from live roster.
+  // We also track which players are currently rostered so we can tell apart
+  // "dropped before lock date then re-added" (keeperValueFuture=0, still in live roster)
+  // from "dropped after lock date" (not in live roster, but present in historical snapshot).
+  // ESPN returns the CURRENT keeperValueFuture even on historical queries, so the historical
+  // value for a post-lock-date drop is wrong — we correct for this below.
   const liveAcqByPlayerId: Record<number, string> = {};
+  const liveKeeperValueFuture: Record<number, number> = {};
+  const liveRosteredIds = new Set<number>();
   for (const team of liveData.teams ?? []) {
     for (const entry of team.roster?.entries ?? []) {
       const pid: number = entry.playerPoolEntry?.player?.id;
-      if (pid && entry.acquisitionType) liveAcqByPlayerId[pid] = entry.acquisitionType;
+      if (pid) {
+        if (entry.acquisitionType) liveAcqByPlayerId[pid] = entry.acquisitionType;
+        liveKeeperValueFuture[pid] = entry.playerPoolEntry?.keeperValueFuture ?? 0;
+        liveRosteredIds.add(pid);
+      }
     }
   }
 
@@ -120,9 +131,15 @@ export async function GET() {
           ? "TRADE"
           : "ADD";
 
-      // keeperValueFuture === 0 means the player was dropped at some point this season
-      // (ESPN tracks this internally). This catches ADD players AND "dropped then traded" players.
-      const wasEverDropped = !ppe.keeperValueFuture;
+      // keeperValueFuture === 0 means the player was dropped at some point this season.
+      // ESPN returns the CURRENT value even on historical snapshot queries, so we must
+      // distinguish "dropped before lock date" (bad) from "dropped after lock date" (OK).
+      // If the player is still in the live roster, use the live keeperValueFuture.
+      // If the player is NOT in the live roster (dropped after lock date), they were valid on
+      // Aug 9 (they appear in the historical snapshot), so treat as wasEverDropped = false.
+      const wasEverDropped = liveRosteredIds.has(player.id)
+        ? !liveKeeperValueFuture[player.id]
+        : false;
       const draftRound = draftRoundByName[player.fullName] ?? null;
       const keeperRound2027: number | "FA" = wasEverDropped || draftRound === null
         ? "FA"
