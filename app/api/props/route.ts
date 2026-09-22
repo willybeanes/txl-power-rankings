@@ -40,10 +40,43 @@ export async function GET() {
 
   // Build teamId -> team name (from mTeam which always has this)
   const teamNameById: Record<number, string> = {};
-  for (const t of metaData.teams ?? []) teamNameById[t.id] = t.name;
+  const teamIdByName: Record<string, number> = {};
+  for (const t of metaData.teams ?? []) {
+    teamNameById[t.id] = t.name;
+    teamIdByName[t.name] = t.id;
+  }
 
   // Build team name -> scored team
   const teamByName = new Map(scored.map((t) => [t.team, t]));
+
+  // Regular season = matchup periods 1–18; playoffs = 19–21.
+  // ESPN's mTeam valuesByStat include playoffs, so we rebuild HR, K, pointsFor,
+  // pointsAgainst, and W/L from the per-matchup cumulativeScore.scoreByStat data.
+  const RS_LAST_PERIOD = 18;
+  type RSEntry = { hr: number; k: number; pf: number; pa: number; w: number; l: number };
+  const rsStats: Record<number, RSEntry> = {};
+
+  for (const matchup of matchupData.schedule ?? []) {
+    const pid: number = matchup.matchupPeriodId;
+    if (pid > RS_LAST_PERIOD) continue;
+    for (const [side, opp] of [["home", "away"], ["away", "home"]] as [string, string][]) {
+      const team = matchup[side as "home" | "away"];
+      const oppTeam = matchup[opp as "home" | "away"];
+      if (!team) continue;
+      const tid: number = team.teamId;
+      if (!rsStats[tid]) rsStats[tid] = { hr: 0, k: 0, pf: 0, pa: 0, w: 0, l: 0 };
+      const entry = rsStats[tid];
+      entry.hr += team.cumulativeScore?.scoreByStat?.["5"]?.score ?? 0;
+      entry.k += team.cumulativeScore?.scoreByStat?.["48"]?.score ?? 0;
+      entry.pf += team.totalPoints ?? 0;
+      entry.pa += oppTeam?.totalPoints ?? 0;
+      const won = matchup.winner === side.toUpperCase();
+      const lost =
+        matchup.winner !== "UNDECIDED" && matchup.winner !== "TIE" && !won;
+      if (won) entry.w++;
+      if (lost) entry.l++;
+    }
+  }
 
   // Determine how many scoring days each matchup period spans
   const periodDays: Record<number, number> = {};
@@ -83,11 +116,19 @@ export async function GET() {
   weeklyScores.sort((a, b) => b.points - a.points);
   const weeklyTop3 = weeklyScores.slice(0, 3);
 
-  // HR leaders (season total)
-  const hrRanked = [...scored].sort((a, b) => b.raw.HR - a.raw.HR);
+  // HR leaders (regular season only, periods 1–18)
+  const hrRanked = [...scored].sort((a, b) => {
+    const aRS = rsStats[teamIdByName[a.team] ?? 0]?.hr ?? 0;
+    const bRS = rsStats[teamIdByName[b.team] ?? 0]?.hr ?? 0;
+    return bRS - aRS;
+  });
 
-  // Pitcher K leaders (season total)
-  const kRanked = [...scored].sort((a, b) => b.raw.K_P - a.raw.K_P);
+  // Pitcher K leaders (regular season only, periods 1–18)
+  const kRanked = [...scored].sort((a, b) => {
+    const aRS = rsStats[teamIdByName[a.team] ?? 0]?.k ?? 0;
+    const bRS = rsStats[teamIdByName[b.team] ?? 0]?.k ?? 0;
+    return bRS - aRS;
+  });
 
   // Dense ranking helper: ties share the same rank, next distinct value increments by 1
   type ScoredTeam = typeof scored[0];
@@ -116,32 +157,58 @@ export async function GET() {
   }
 
   // Bad luck: PA_rank + PF_rank - W%_rank (lowest score = most bad luck)
+  // Uses regular-season-only pointsFor, pointsAgainst, and W/L (periods 1–18).
   const n = scored.length;
-  const paRank = competitionRank(scored, (t) => t.pointsAgainst);
-  const pfRank = competitionRank(scored, (t) => t.pointsFor);
+
+  // Build RS-only versions of the scored array for ranking purposes
+  type ScoredTeamRS = (typeof scored)[0] & {
+    rsPF: number; rsPA: number; rsWins: number; rsLosses: number;
+  };
+  const scoredRS: ScoredTeamRS[] = scored.map((t) => {
+    const rs = rsStats[teamIdByName[t.team] ?? 0] ?? { pf: 0, pa: 0, w: 0, l: 0 };
+    return { ...t, rsPF: rs.pf, rsPA: rs.pa, rsWins: rs.w, rsLosses: rs.l };
+  });
+
+  const paRank = competitionRank(scoredRS, (t) => (t as ScoredTeamRS).rsPA);
+  const pfRank = competitionRank(scoredRS, (t) => (t as ScoredTeamRS).rsPF);
   const wPctRank = competitionRank(
-    scored,
-    (t) => t.raw.matchupWins / Math.max(1, t.raw.matchupWins + t.raw.matchupLosses)
+    scoredRS,
+    (t) => {
+      const tt = t as ScoredTeamRS;
+      return tt.rsWins / Math.max(1, tt.rsWins + tt.rsLosses);
+    }
   );
 
-  const badLuck = scored
-    .map((t) => ({
-      team: t.team,
-      manager: t.manager,
-      record: t.record,
-      pointsFor: t.pointsFor,
-      pointsAgainst: t.pointsAgainst,
-      paRank: paRank[t.team],
-      pfRank: pfRank[t.team],
-      wPctRank: wPctRank[t.team],
-      badLuckScore: paRank[t.team] + pfRank[t.team] - wPctRank[t.team],
-    }))
+  const badLuck = scoredRS
+    .map((t) => {
+      const rsW = t.rsWins;
+      const rsL = t.rsLosses;
+      return {
+        team: t.team,
+        manager: t.manager,
+        record: `${rsW}-${rsL}`,
+        pointsFor: t.rsPF,
+        pointsAgainst: t.rsPA,
+        paRank: paRank[t.team],
+        pfRank: pfRank[t.team],
+        wPctRank: wPctRank[t.team],
+        badLuckScore: paRank[t.team] + pfRank[t.team] - wPctRank[t.team],
+      };
+    })
     .sort((a, b) => a.badLuckScore - b.badLuckScore); // lowest = most bad luck
 
   return NextResponse.json({
     n,
-    hrAll: hrRanked.map((t) => ({ team: t.team, manager: t.manager, value: t.raw.HR })),
-    kAll: kRanked.map((t) => ({ team: t.team, manager: t.manager, value: t.raw.K_P })),
+    hrAll: hrRanked.map((t) => ({
+      team: t.team,
+      manager: t.manager,
+      value: rsStats[teamIdByName[t.team] ?? 0]?.hr ?? 0,
+    })),
+    kAll: kRanked.map((t) => ({
+      team: t.team,
+      manager: t.manager,
+      value: rsStats[teamIdByName[t.team] ?? 0]?.k ?? 0,
+    })),
     weeklyTop10: weeklyScores.slice(0, 10),
     badLuck,
   });
