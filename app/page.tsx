@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { type TeamScored } from "@/lib/data";
+import { type TeamScored, type TeamRawStats } from "@/lib/data";
 import { DRAFT_PICKS, DRAFT_MANAGERS, type DraftPick } from "@/lib/draft";
 import { computePickLedger, type Trade } from "@/lib/trades";
 
@@ -37,35 +37,54 @@ function StreakBadge({ streak }: { streak: string }) {
 
 interface SnapshotDay {
   snapshot_date: string;
-  teams: { team: string; manager?: string; dailyPoints?: number; totalScore?: number }[];
+  teams: {
+    team: string; manager?: string; dailyPoints?: number; totalScore?: number;
+    rank?: number; record?: string; hittingScore?: number; pitchingScore?: number; era?: number;
+  }[];
 }
+
+const RS_END_DATE = "2026-08-09";
 
 const CHART_COLORS = [
   "#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6",
   "#1abc9c", "#e67e22", "#d63031", "#6c5ce7", "#00b894", "#fd79a8",
 ];
 
-function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rankings: TeamScored[] }) {
-  const teamNames = rankings.map((t) => t.team);
-  const managers = Object.fromEntries(rankings.map((t) => [t.team, t.manager]));
-  const liveByTeam = Object.fromEntries(rankings.map((t) => [t.team, t.totalScore]));
+function AllTeamsChart({ snapshots, rankings }: { snapshots: SnapshotDay[]; rankings?: TeamScored[] }) {
+  // When rankings is provided, append a live "now" data point at the end.
+  // When omitted (season over), the last snapshot is the final point.
+  const teamNames = (rankings ?? []).map((t) => t.team);
+  const managers = Object.fromEntries((rankings ?? []).map((t) => [t.team, t.manager]));
+  const liveByTeam = Object.fromEntries((rankings ?? []).map((t) => [t.team, t.totalScore]));
 
-  // Build data series: historical snapshots + live "now" point, normalized to
+  // Collect all team names that appear in snapshots (for when rankings is absent)
+  const snapshotTeamNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const snap of snapshots) for (const t of snap.teams) if (t.team) names.add(t.team);
+    return Array.from(names);
+  }, [snapshots]);
+
+  const allTeamNames = rankings ? teamNames : snapshotTeamNames;
+  const allManagers = rankings ? managers : Object.fromEntries(
+    snapshots.at(-1)?.teams.map((t) => [t.team, t.manager ?? t.team]) ?? []
+  );
+
+  // Build data series: historical snapshots + optional live "now" point, normalized to
   // start at 0 so the chart shows points accumulated within the visible window.
   const { labels, cumData } = useMemo(() => {
     const snapshotLabels = snapshots.map((s) => s.snapshot_date.slice(5));
-    const allLabels = [...snapshotLabels, "Live"];
+    const allLabels = rankings ? [...snapshotLabels, "Live"] : snapshotLabels;
 
     const result: Record<string, number[]> = {};
-    for (const name of teamNames) {
-      const manager = managers[name];
+    for (const name of allTeamNames) {
+      const manager = allManagers[name];
       const historical = snapshots.map((snap) => {
         // Match by manager first (stable across renames), fall back to team name
         const t = snap.teams.find((s) => s.manager === manager) ??
                   snap.teams.find((s) => s.team === name);
         return t?.totalScore ?? 0;
       });
-      const raw = [...historical, liveByTeam[name] ?? 0];
+      const raw = rankings ? [...historical, liveByTeam[name] ?? 0] : historical;
       const baseline = raw[0] ?? 0;
       result[name] = raw.map((v) => v - baseline);
     }
@@ -347,13 +366,11 @@ function TeamRow({
   hittingRange,
   pitchingRange,
   eraRange,
-  opsRange,
 }: {
   team: TeamScored;
   hittingRange: [number, number];
   pitchingRange: [number, number];
   eraRange: [number, number];
-  opsRange: [number, number];
 }) {
   return (
     <tr className="border-t border-border/50 hover:bg-surface-2/40 transition-colors">
@@ -389,21 +406,6 @@ function TeamRow({
         style={{ backgroundColor: heatColor(team.era, eraRange[0], eraRange[1], true) }}
       >
         {team.era.toFixed(2)}
-      </td>
-      <td
-        className="py-3 pr-3 text-right text-sm tabular-nums text-text-secondary"
-        style={{ backgroundColor: heatColor(team.ops, opsRange[0], opsRange[1]) }}
-      >
-        {team.ops.toFixed(3).replace(/^0/, "")}
-      </td>
-      <td className="py-3 pr-4 text-center">
-        <StreakBadge streak={team.streak} />
-      </td>
-      <td className="py-3 pr-4 text-center text-xs text-text-muted tabular-nums">
-        {team.moves}
-      </td>
-      <td className="py-3 pr-4 text-right text-sm tabular-nums text-text-secondary">
-        {team.playoffPct.toFixed(1)}%
       </td>
     </tr>
   );
@@ -1739,9 +1741,41 @@ export default function Home() {
     }
   };
 
+  // Derive frozen regular-season standings from the last Aug 9 snapshot.
+  // Used for the standings tab; PFPAScatter and other live features still use `rankings`.
+  const finalRankings = useMemo<TeamScored[] | null>(() => {
+    if (!snapshots || snapshots.length === 0) return null;
+    const snap = snapshots[snapshots.length - 1];
+    return snap.teams
+      .filter((t) => t.rank != null)
+      .map((t) => ({
+        rank: t.rank!,
+        team: t.team,
+        manager: t.manager ?? t.team,
+        record: t.record ?? "-",
+        hittingScore: t.hittingScore ?? 0,
+        pitchingScore: t.pitchingScore ?? 0,
+        totalScore: t.totalScore ?? 0,
+        era: t.era ?? 0,
+        streak: "-",
+        moves: 0,
+        ops: 0,
+        playoffPct: 0,
+        pointsFor: 0,
+        pointsAgainst: 0,
+        raw: {} as TeamRawStats,
+        hittingBreakdown: {},
+        pitchingBreakdown: {},
+      } satisfies TeamScored))
+      .sort((a, b) => a.rank - b.rank);
+  }, [snapshots]);
+
+  // Standings table source: frozen regular season data once snapshots load
+  const standingsSource = finalRankings ?? rankings;
+
   const sorted = useMemo(() => {
-    if (!rankings) return null;
-    const list = [...rankings];
+    if (!standingsSource) return null;
+    const list = [...standingsSource];
     list.sort((a, b) => {
       let cmp: number;
       if (sortKey === "team") {
@@ -1752,31 +1786,31 @@ export default function Home() {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return list;
-  }, [rankings, sortKey, sortDir]);
+  }, [standingsSource, sortKey, sortDir]);
 
   const hittingRange = useMemo<[number, number]>(() => {
-    if (!rankings) return [0, 0];
-    const scores = rankings.map((t) => t.hittingScore);
+    if (!standingsSource) return [0, 0];
+    const scores = standingsSource.map((t) => t.hittingScore);
     return [Math.min(...scores), Math.max(...scores)];
-  }, [rankings]);
+  }, [standingsSource]);
 
   const pitchingRange = useMemo<[number, number]>(() => {
-    if (!rankings) return [0, 0];
-    const scores = rankings.map((t) => t.pitchingScore);
+    if (!standingsSource) return [0, 0];
+    const scores = standingsSource.map((t) => t.pitchingScore);
     return [Math.min(...scores), Math.max(...scores)];
-  }, [rankings]);
+  }, [standingsSource]);
 
   const eraRange = useMemo<[number, number]>(() => {
-    if (!rankings) return [0, 0];
-    const scores = rankings.map((t) => t.era);
+    if (!standingsSource) return [0, 0];
+    const scores = standingsSource.map((t) => t.era);
     return [Math.min(...scores), Math.max(...scores)];
-  }, [rankings]);
+  }, [standingsSource]);
 
   const opsRange = useMemo<[number, number]>(() => {
-    if (!rankings) return [0, 0];
-    const scores = rankings.map((t) => t.ops);
+    if (!standingsSource) return [0, 0];
+    const scores = standingsSource.map((t) => t.ops);
     return [Math.min(...scores), Math.max(...scores)];
-  }, [rankings]);
+  }, [standingsSource]);
 
   useEffect(() => {
     fetch("/api/rankings")
@@ -1790,10 +1824,8 @@ export default function Home() {
       })
       .catch((err) => setError(err.message));
 
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const toDate = yesterday.toISOString().split("T")[0];
-    fetch(`/api/snapshots?from=2026-03-25&to=${toDate}`)
+    // Cap snapshots at regular season end — cron stopped Aug 10 anyway
+    fetch(`/api/snapshots?from=2026-03-25&to=${RS_END_DATE}`)
       .then((res) => res.json())
       .then((data) => setSnapshots(data.snapshots ?? []))
       .catch(() => setSnapshots([]));
@@ -1934,7 +1966,6 @@ export default function Home() {
                     >
                       #{i + 1}
                     </span>
-                    <StreakBadge streak={team.streak} />
                   </div>
                   <div className="flex items-center gap-3 mb-2">
                     {getHeadshot(team.manager) && (
@@ -2005,25 +2036,6 @@ export default function Home() {
                     >
                       ERA<SortIcon active={sortKey === "era"} dir={sortDir} />
                     </th>
-                    <th
-                      className="py-3 pr-3 text-right cursor-pointer select-none hover:text-text-secondary"
-                      onClick={() => toggleSort("ops")}
-                    >
-                      OPS<SortIcon active={sortKey === "ops"} dir={sortDir} />
-                    </th>
-                    <th className="py-3 pr-4 text-center">Streak</th>
-                    <th
-                      className="py-3 pr-4 text-center cursor-pointer select-none hover:text-text-secondary"
-                      onClick={() => toggleSort("moves")}
-                    >
-                      Moves<SortIcon active={sortKey === "moves"} dir={sortDir} />
-                    </th>
-                    <th
-                      className="py-3 pr-4 text-right cursor-pointer select-none hover:text-text-secondary"
-                      onClick={() => toggleSort("playoffPct")}
-                    >
-                      Playoff%<SortIcon active={sortKey === "playoffPct"} dir={sortDir} />
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2034,7 +2046,6 @@ export default function Home() {
                       hittingRange={hittingRange}
                       pitchingRange={pitchingRange}
                       eraRange={eraRange}
-                      opsRange={opsRange}
                     />
                   ))}
                 </tbody>
@@ -2042,13 +2053,7 @@ export default function Home() {
             </div>
 
             <p className="text-text-muted text-xs mt-6 text-center">
-              Live data from ESPN Fantasy Baseball
-              {updatedAt && (
-                <>
-                  <br />
-                  Last updated {new Date(updatedAt).toLocaleString()}
-                </>
-              )}
+              Final Regular Season Standings · August 9, 2026
             </p>
           </>
         ) : (
@@ -2058,45 +2063,29 @@ export default function Home() {
               <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                 <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">
                   {(() => {
-                    if (!chartFrom && !chartTo) return "Cumulative Points — Season to Date";
-                    if (chartFrom && !chartTo) {
-                      const days = Math.round((Date.now() - new Date(chartFrom).getTime()) / 86400000);
-                      if (days === 7) return "Cumulative Points — Last 7 Days";
-                      if (days === 14) return "Cumulative Points — Last 14 Days";
-                      if (days === 30) return "Cumulative Points — Last 30 Days";
-                      return `Cumulative Points — Since ${chartFrom.slice(5).replace("-", "/")}`;
-                    }
-                    return `Cumulative Points — ${chartFrom.slice(5).replace("-", "/")} to ${chartTo.slice(5).replace("-", "/")}`;
+                    if (!chartFrom && !chartTo) return "Cumulative Points — Regular Season";
+                    if (chartFrom && !chartTo) return `Cumulative Points — Since ${chartFrom.slice(5).replace("-", "/")}`;
+                    return `Cumulative Points — ${chartFrom.slice(5).replace("-", "/")} to ${(chartTo || RS_END_DATE).slice(5).replace("-", "/")}`;
                   })()}
                 </h2>
                 {/* Date filter controls */}
                 <div className="flex flex-wrap items-center gap-2">
-                  {([["All", null], ["30d", 30], ["14d", 14], ["7d", 7]] as [string, number | null][]).map(([label, days]) => {
-                    const active = days === null ? (!chartFrom && !chartTo) : (() => {
-                      if (!chartFrom || chartTo) return false;
-                      const d = new Date(); d.setDate(d.getDate() - (days as number));
-                      return chartFrom === d.toISOString().split("T")[0];
-                    })();
-                    return (
-                      <button
-                        key={label}
-                        onClick={() => applyPreset(days)}
-                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-                          active
-                            ? "bg-brand-red text-white"
-                            : "bg-surface-2 text-text-muted hover:text-text-primary"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
+                  <button
+                    onClick={() => applyPreset(null)}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                      !chartFrom && !chartTo
+                        ? "bg-brand-red text-white"
+                        : "bg-surface-2 text-text-muted hover:text-text-primary"
+                    }`}
+                  >
+                    All
+                  </button>
                   <div className="flex items-center gap-1.5 ml-1">
                     <input
                       type="date"
                       value={chartFrom}
                       min="2026-03-25"
-                      max={chartTo || new Date().toISOString().split("T")[0]}
+                      max={chartTo || RS_END_DATE}
                       onChange={(e) => setChartFrom(e.target.value)}
                       className="bg-surface-2 border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-brand-red"
                     />
@@ -2105,7 +2094,7 @@ export default function Home() {
                       type="date"
                       value={chartTo}
                       min={chartFrom || "2026-03-25"}
-                      max={new Date().toISOString().split("T")[0]}
+                      max={RS_END_DATE}
                       onChange={(e) => setChartTo(e.target.value)}
                       className="bg-surface-2 border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-brand-red"
                     />
@@ -2115,10 +2104,10 @@ export default function Home() {
               {filteredSnapshots === null ? (
                 <div className="animate-pulse h-64 bg-surface-2/50 rounded-lg" />
               ) : (
-                <AllTeamsChart snapshots={filteredSnapshots} rankings={rankings} />
+                <AllTeamsChart snapshots={filteredSnapshots} />
               )}
               <p className="text-text-muted text-xs mt-4">
-                Daily snapshots taken at ~11:55 PM ET · Each point represents one day&apos;s fantasy scoring
+                Daily snapshots Mar 25 – Aug 9 · Regular season final
               </p>
             </div>
 
